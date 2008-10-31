@@ -47,6 +47,7 @@ tokens {
 	INTEGER_CONSTANT;
 	FLOAT_CONSTANT;
 	VARIABLE;
+	CALLFUNC;
 }
 
 
@@ -130,7 +131,8 @@ power: atom;
 atom: LPAREN expr RPAREN
 	| integer_constant
 	| float_constant
-	| variable_name;
+	| variable_name
+	| function_call;
 
 integer_constant:
 	INTEGER -> ^(INTEGER_CONSTANT INTEGER);
@@ -139,5 +141,7 @@ float_constant:
 	FLOAT -> ^(FLOAT_CONSTANT FLOAT);
 
 variable_name: NAME -> ^(VARIABLE NAME);
+
+function_call: NAME LPAREN RPAREN -> ^(CALLFUNC NAME);
 
 

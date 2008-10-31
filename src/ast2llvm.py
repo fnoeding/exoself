@@ -50,6 +50,7 @@ class ModuleTranslator(object):
 		self._dispatchTable['return'] = self._onReturn
 		self._dispatchTable['INTEGER_CONSTANT'] = self._onIntegerConstant
 		self._dispatchTable['FLOAT_CONSTANT'] = self._onFloatConstant
+		self._dispatchTable['CALLFUNC'] = self._onCallFunc
 		self._dispatchTable['+'] = self._onBasicMathOperator
 		self._dispatchTable['-'] = self._onBasicMathOperator
 		self._dispatchTable['*'] = self._onBasicMathOperator
@@ -149,6 +150,17 @@ class ModuleTranslator(object):
 
 		return Constant.real(ty_float, f) # FIXME use float
 
+
+	def _onCallFunc(self, tree):
+		assert(tree.getText() == 'CALLFUNC')
+
+		callee = tree.getChild(0).getText()
+
+		assert(tree.getChildCount() == 1) # FIXME must be removed for function arguments
+
+		assert(callee in self._functions) # TODO improve this --> better error handling
+
+		return self._currentBuilder.call(self._functions[callee], [], 'ret_%s' % callee)
 
 	def _onBasicMathOperator(self, tree):
 		nodeType = tree.getText()

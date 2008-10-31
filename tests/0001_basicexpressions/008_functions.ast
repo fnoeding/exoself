@@ -1,0 +1,1 @@
+(MODULE (DEFFUNC f int32 (BLOCK (return (INTEGER_CONSTANT 17)))) (DEFFUNC g int32 (BLOCK (return (INTEGER_CONSTANT 14)))) (DEFFUNC main int32 (BLOCK (return (- (CALLFUNC f) (CALLFUNC g))))))
