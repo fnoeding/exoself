@@ -1,1 +1,1 @@
-(MODULE (DEFFUNC main int32 (BLOCK pass)))
+(MODULE (DEFFUNC main void (BLOCK pass)))

@@ -4,4 +4,4 @@ def main() as int32
 	0xdead_BEAF;
 	007;
 	0b0010_1010;
-	0xdead_beaf / 0b10_10_10;}
+	0xdead_beaf / 0b10_10_10; return 0xDEAD_beaf;}

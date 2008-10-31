@@ -34,34 +34,63 @@ import os
 import sys
 from optparse import OptionParser
 
+options = None
+args = None
 
 
 def runTest(filebase):
-	# convert source 2 ast
-	ast = os.popen('./source2ast.py %s.es' % filebase, 'r').read()
-	# check ast
+	path, filename = os.path.split(filebase)
+
+	exitStatus = os.system('../src/exoself --save-temps %s.es' % filebase)
+	if os.WEXITSTATUS(exitStatus) != 0:
+		print 'compilation failed'
+		return False
+
+
+	# verify ast
 	if os.path.exists('%s.ast' % filebase):
 		expectedAST = file('%s.ast' % filebase).read()
-		expectedAST = ' '.join(expectedAST.split('\n'))
-		if ast.strip() != expectedAST.strip():
-			print 'received: %s\nexpected: %s' % (ast, expectedAST)
+		expectedAST = ' '.join(expectedAST.split('\n')).strip()
+
+		astString = file('../tests_tmp/%s.ast' % filename).read().strip()
+		if astString != expectedAST:
+			print 'received ast: %s\nexpected ast: %s' % (astString, expectedAST)
 			return False
 
-	else:
-		print 'no reference! received: %s' % ast
+	# run code, check return value
+	if os.path.exists('%s.ret' % filebase):
+		expectedRetval = file('%s.ret' % filebase).read().strip()
+		expectedRetval = int(expectedRetval) & 0xFF
 
-	# run code and test result
-	# TODO
+		if expectedRetval < 0:
+			expectedRetval = 256 - abs(expectedRetval)
+
+
+		exitStatus = os.system('%s ../tests_tmp/%s.bc' % (options.lli, filename))
+		retVal = os.WEXITSTATUS(exitStatus)
+		if retVal != expectedRetval:
+			print 'received ret: %d\nexpected ret: %s' % (retVal, expectedRetval)
+			return False
+
 
 	return True
 
 
 def main():
+	global options
+	global args
+
 	parser = OptionParser()
-	parser.add_option('-s', '--suite', help='test suite prefix', dest='suitePrefix')
+	parser.add_option('-s', '--suite', help='test suite prefix', dest='suitePrefix', default='')
 	parser.add_option('-k', '--continue', help='continue even when tests fail', dest='continueAfterFailure', action='store_true', default=False)
+	parser.add_option('--lli', help='path to lli command', dest='lli', default='~/llvm/bin/lli')
 
 	options, args = parser.parse_args()
+
+	# switch to temp dir, cleanup
+	# several temporary files will be generated here
+	os.chdir('../tests_tmp')
+	os.system('rm -f *.ast *.ll *.bc')
 
 	total = 0
 	failed = 0
@@ -71,6 +100,9 @@ def main():
 	l = os.listdir('../tests')
 	l.sort()
 	for e in l:
+		if options.suitePrefix and not e.startswith(options.suitePrefix):
+			continue
+
 		e = '../tests/' + e
 		if os.path.isdir(e):
 			print e

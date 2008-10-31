@@ -27,6 +27,8 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 # 
+import setuppaths
+
 from llvm import *
 from llvm.core import *
 from llvm.ee import *
@@ -92,6 +94,11 @@ class ModuleTranslator(object):
 			
 			self._onBlock(x)
 
+		if returnType == 'void':
+			self._currentBuilder.ret_void()
+
+		ty_func.verify()
+
 	def _onBlock(self, tree):
 		assert(tree.getText() == 'BLOCK')
 
@@ -120,7 +127,7 @@ class ModuleTranslator(object):
 			i = int(value[2:], 16)
 		elif value.startswith('0b'):
 			i = int(value[2:], 2)
-		elif value.startswith('0'):
+		elif value.startswith('0') and len(value) > 1:
 			i = int(value[1:], 8)
 		else:
 			i = int(value)
@@ -193,6 +200,8 @@ class ModuleTranslator(object):
 
 		self._dispatch(tree)
 
+		self._module.verify()
+
 		return self._module, self._functions
 
 
@@ -200,7 +209,7 @@ def run(module, function):
 	mp = ModuleProvider.new(module)
 	ee = ExecutionEngine.new(mp)
 
-	r = ee.run_function(function, [])
-	print r.as_int()
+	return ee.run_function(function, [])
+
 
 

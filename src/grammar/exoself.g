@@ -46,6 +46,7 @@ tokens {
 	SIMPLE_STATEMENT;
 	INTEGER_CONSTANT;
 	FLOAT_CONSTANT;
+	VARIABLE;
 }
 
 
@@ -90,15 +91,21 @@ LPAREN: '(';
 RPAREN: ')';
 LCURLY: '{';
 RCURLY: '}';
-LBRACKET : '[';
-RBRACKET : ']';
+LBRACKET: '[';
+RBRACKET: ']';
+ASSIGN: '=';
 
 
 start_module: global_stmt* EOF-> ^(MODULE global_stmt*);
 
 global_stmt: deffunc;
 
-simple_stmt: pass_stmt | return_stmt | expr | defvar;
+simple_stmt: pass_stmt | return_stmt | expr | defvar | assign_stmt;
+
+assign_stmt: simple_assign;
+simple_assign: NAME ASSIGN expr -> ^(ASSIGN NAME expr);
+
+
 pass_stmt: 'pass'^;
 return_stmt: 'return'^ expr?;
 
@@ -122,12 +129,15 @@ factor:
 power: atom;
 atom: LPAREN expr RPAREN
 	| integer_constant
-	| float_constant;
+	| float_constant
+	| variable_name;
 
 integer_constant:
 	INTEGER -> ^(INTEGER_CONSTANT INTEGER);
 
 float_constant:
 	FLOAT -> ^(FLOAT_CONSTANT FLOAT);
+
+variable_name: NAME -> ^(VARIABLE NAME);
 
 

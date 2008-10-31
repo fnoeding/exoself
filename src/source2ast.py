@@ -28,11 +28,11 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 # 
+
+import setuppaths
+
 from optparse import OptionParser
 import sys
-sys.path.append('grammar')
-sys.path.append('../3rdparty/antlr/pyruntime')
-sys.path.append('../3rdparty/llvm/py')
 
 import antlr3
 import exoselfLexer

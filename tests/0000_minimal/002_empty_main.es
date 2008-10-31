@@ -1,7 +1,9 @@
 
-def main() as int32
+def main() as void
 {
-	pass;
-}
+	pass
+		
+		;
+			}
 
 
