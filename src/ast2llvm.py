@@ -119,49 +119,86 @@ class ModuleTranslator(object):
 		self._module = Module.new('main_module')
 		self._scopeStack = _ScopeStack()
 
+		# first pass: make all functions available, so we don't need any stupid forward declarations
+		for x in _childrenIterator(tree):
+			if x.getText() == 'DEFFUNC':
+				self._onDefProtoype(x)
+
+
+		# second pass: translate code
 		for x in _childrenIterator(tree):
 			self._dispatch(x)
 
 
-	def _onDefFunction(self, tree):
+	def _onDefProtoype(self, tree):
+		# this function also gets called for functions definitions and should then only generate a prototype
 		assert(tree.getText() == 'DEFFUNC')
-		
-		with _ScopeStackWithProxy(self._scopeStack):
 
-			ci = _childrenIterator(tree)
-			name = ci.next().getText()
-			returnType = ci.next().getText()
-			argList = ci.next()
 
-			if returnType == 'int32':
-				ty_ret = Type.int(32)
-			elif returnType == 'void':
-				ty_ret = Type.void()
+		ci = _childrenIterator(tree)
+		name = ci.next().getText()
+		returnType = ci.next().getText()
+		argList = ci.next()
+
+		if returnType == 'int32':
+			ty_ret = Type.int(32)
+		elif returnType == 'void':
+			ty_ret = Type.void()
+		else:
+			raise NotImplementedError('unsupported type: %s' % returnType)
+
+
+		functionParam_ty = []
+		functionParamNames = []
+		for i in range(argList.getChildCount() / 2):
+			argName = argList.getChild(i * 2).getText()
+			argTypeName = argList.getChild(i * 2 + 1).getText()
+
+			if argTypeName == 'int32':
+				arg_ty = Type.int(32)
 			else:
-				raise NotImplementedError('unsupported type: %s' % returnType)
+				raise NotImplementedError('unsupported type: %s' % typeName)
+
+			functionParam_ty.append(arg_ty)
+			functionParamNames.append(argName)
 
 
-			functionParam_ty = []
-			functionParamNames = []
-			for i in range(argList.getChildCount() / 2):
-				argName = argList.getChild(i * 2).getText()
-				argTypeName = argList.getChild(i * 2 + 1).getText()
+		ty_funcProto = Type.function(ty_ret, functionParam_ty)
 
-				if argTypeName == 'int32':
-					arg_ty = Type.int(32)
-				else:
-					raise NotImplementedError('unsupported type: %s' % typeName)
+		# was there already a function with this name?
+		# if everything matches, just ignore - otherwise fail
+		if name in self._functions:
+			ty_old_func = self._functions[name]
 
-				functionParam_ty.append(arg_ty)
-				functionParamNames.append(argName)
+			# compare types
+			assert(ty_old_func.type == Type.pointer(ty_funcProto))
 
-
-			ty_funcProto = Type.function(ty_ret, functionParam_ty)
+			# TODO compare more?
+			# maybe add argument names if they were omitted previously?
+		else:
 			ty_func = self._module.add_function(ty_funcProto, name)
 
 			for i,x in enumerate(functionParamNames):
 				ty_func.args[i].name = x
-				self._scopeStack.add(x, ty_func.args[i])
+
+			self._functions[name] = ty_func # FIXME refactor: this dict is also provided by module
+
+
+	def _onDefFunction(self, tree):
+		assert(tree.getText() == 'DEFFUNC')
+
+		ci = _childrenIterator(tree)
+		name = ci.next().getText()
+		returnType = ci.next().getText()
+		argList = ci.next()
+
+		self._onDefProtoype(tree)
+		ty_func = self._functions[name]
+		ty_func.name = name
+	
+		with _ScopeStackWithProxy(self._scopeStack):
+			for i in range(len(ty_func.args)):
+				self._scopeStack.add(ty_func.args[i].name, ty_func.args[i])
 
 			self._currentFunction = ty_func
 			self._functions[name] = ty_func
