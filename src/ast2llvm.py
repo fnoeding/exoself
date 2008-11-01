@@ -104,13 +104,21 @@ class ModuleTranslator(object):
 		self._dispatchTable['FLOAT_CONSTANT'] = self._onFloatConstant
 		self._dispatchTable['CALLFUNC'] = self._onCallFunc
 		self._dispatchTable['VARIABLE'] = self._onVariable
-		self._dispatchTable['+'] = self._onBasicMathOperator
-		self._dispatchTable['-'] = self._onBasicMathOperator
-		self._dispatchTable['*'] = self._onBasicMathOperator
-		self._dispatchTable['/'] = self._onBasicMathOperator
-		self._dispatchTable['//'] = self._onBasicMathOperator
-		self._dispatchTable['%'] = self._onBasicMathOperator
-
+		self._dispatchTable['+'] = self._onBasicOperator
+		self._dispatchTable['-'] = self._onBasicOperator
+		self._dispatchTable['*'] = self._onBasicOperator
+		self._dispatchTable['/'] = self._onBasicOperator
+		self._dispatchTable['//'] = self._onBasicOperator
+		self._dispatchTable['%'] = self._onBasicOperator
+		self._dispatchTable['not'] = self._onBasicOperator
+		self._dispatchTable['and'] = self._onBasicOperator
+		self._dispatchTable['or'] = self._onBasicOperator
+		self._dispatchTable['xor'] = self._onBasicOperator
+		self._dispatchTable['<'] = self._onBasicOperator
+		self._dispatchTable['<='] = self._onBasicOperator
+		self._dispatchTable['=='] = self._onBasicOperator
+		self._dispatchTable['>='] = self._onBasicOperator
+		self._dispatchTable['>'] = self._onBasicOperator
 
 
 	def _onModule(self, tree):
@@ -296,9 +304,9 @@ class ModuleTranslator(object):
 
 		return self._currentBuilder.call(self._functions[callee], params, 'ret_%s' % callee)
 
-	def _onBasicMathOperator(self, tree):
+	def _onBasicOperator(self, tree):
 		nodeType = tree.getText()
-		if nodeType in ['*', '//', '%', '/'] or (tree.getChildCount() == 2 and nodeType in ['+', '-']):
+		if tree.getChildCount() == 2 and nodeType in '''* // % / and xor or + -'''.split():
 			first = tree.getChild(0)
 			second = tree.getChild(1)
 
@@ -317,9 +325,30 @@ class ModuleTranslator(object):
 				return self._currentBuilder.add(v1, v2)
 			elif nodeType == '-':
 				return self._currentBuilder.sub(v1, v2)
+			elif nodeType in 'and xor or'.split():
+				# TODO implement short circuiting!
+
+				# first convert parameters to booleans
+				if v1.type != Type.int(1):
+					v1 = self._currentBuilder.icmp(IPRED_NE, v1, Constant.int(v1.type, 0))
+				if v2.type != Type.int(1):
+					v2 = self._currentBuilder.icmp(IPRED_NE, v2, Constant.int(v2.type, 0))
+				
+				# do check
+				if nodeType == 'and':
+					r = self._currentBuilder.and_(v1, v2)
+				elif nodeType == 'xor':
+					r = self._currentBuilder.xor(v1, v2)
+				elif nodeType == 'or':
+					r = self._currentBuilder.or_(v1, v2)
+				else:
+					assert(0 and 'dead code path')
+
+				# and go back to int32
+				return self._currentBuilder.zext(r, Type.int(32))
 			else:
 				assert('should never get here')
-		elif tree.getChildCount() == 1 and nodeType in ['-', '+']:
+		elif tree.getChildCount() == 1 and nodeType in '''- + not'''.split():
 			v1 = self._dispatch(tree.getChild(0))
 
 			if nodeType == '+':
@@ -327,8 +356,14 @@ class ModuleTranslator(object):
 			elif nodeType == '-':
 				ty_int = Type.int(32)
 				return self._currentBuilder.sub(Constant.int(ty_int, 0), v1)
+			elif nodeType == 'not':
+				r = self._currentBuilder.icmp(IPRED_EQ, v1, Constant.int(v1.type, 0))
+
+				return self._currentBuilder.zext(r, Type.int(32))
+			else:
+				assert(0 and 'dead code path')
 		else:
-			raise NotImplementedError('basic math operator \'%s\' not yet implemented' % nodeType)
+			raise NotImplementedError('basic operator \'%s\' not yet implemented' % nodeType)
 
 
 

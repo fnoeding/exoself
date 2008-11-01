@@ -57,7 +57,10 @@ DEF: 'def';
 AS: 'as';
 PASS: 'pass';// in principle not needed, since we are using no significant whitespace. But reserve it for later extension in that direction
 RETURN: 'return';
-
+OR: 'or';
+XOR: 'xor';
+AND: 'and';
+NOT: 'not';
 
 fragment LowercaseLetter: 'a' .. 'z';
 fragment UppercaseLetter: 'A' .. 'Z';
@@ -105,6 +108,11 @@ LBRACKET: '[';
 RBRACKET: ']';
 ASSIGN: '=';
 COMMA: ',';
+LESS: '<';
+LESSEQUAL: '<=';
+EQUAL: '==';
+GREATEREQUAL: '>=';
+GREATER: '>';
 
 start_module: global_stmt* EOF-> ^(MODULE global_stmt*);
 
@@ -130,7 +138,16 @@ block: LCURLY
 		RCURLY -> ^(BLOCK simple_stmt*);
 
 
-expr: arith_expr;
+test_expr: or_test;
+or_test: xor_test (OR^ xor_test)*;
+xor_test: and_test (XOR^ and_test)*;
+and_test: not_test (AND^ not_test)*;
+not_test: NOT^ not_test | comparison;
+
+comparison: arith_expr (comp_op arith_expr)*;
+comp_op: LESS | LESSEQUAL | EQUAL | GREATEREQUAL | GREATER;
+
+expr: test_expr;// was: arith_expr
 arith_expr: term ((PLUS^ | MINUS^) term)*;
 term: factor ((ASTERISK^ | SLASH^ | DOUBLESLASH^ | PERCENT^) factor)*;
 factor:
