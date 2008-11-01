@@ -34,31 +34,72 @@ import setuppaths
 
 import os
 import sys
-from optparse import OptionParser
+from optparse import OptionParser, OptionGroup
 
 
 import source2ast
 import ast2llvm
 
+import llvm
+import llvm.core
+import llvm.ee
+import llvm.passes
 
 
+optPasses = {}
+optPasses[0] = ('no optimizations', []) # level 0 must stay at no optimizations! otherwise change code below...
+optPasses[1] = ('mem2reg, instcombine, dce, reassociate, gvn, simplifycfg',
+		[llvm.passes.PASS_PROMOTE_MEMORY_TO_REGISTER,
+				llvm.passes.PASS_INSTRUCTION_COMBINING,
+				llvm.passes.PASS_DEAD_CODE_ELIMINATION,
+				llvm.passes.PASS_REASSOCIATE,
+				llvm.passes.PASS_GVN,
+				llvm.passes.PASS_CFG_SIMPLIFICATION,
+				])
 
+
+def optimizeModule(module, passes, targetData=''):
+	pm = llvm.passes.PassManager.new()
+	pm.add(llvm.ee.TargetData.new(targetData)) # mandatory first pass: target specific data
+
+	for x in passes:
+		pm.add(x)
+
+	pm.run(module)
+
+	del pm
 
 
 def main():
-
 	op = OptionParser()
-	op.set_usage('Usage: %prog [options] input.es')
+	op.set_usage('Usage: %prog [options] input.es [input2.es [...]]')
 	op.add_option('-c', help='compile only, do not link', dest='compileOnly', action='store_true')
 	op.add_option('-A', help='generate ast only', dest='astOnly', action='store_true')
 	op.add_option('-S', help='assemble only', dest='asmOnly', action='store_true')
 
 	op.add_option('--save-temps', help='save temporary files in current directory', dest='saveTemps', action='store_true')
 
+
+	optUsage = []
+	for lvl in optPasses:
+		optUsage.append('optimization level %d: %s' % (lvl, optPasses[lvl][0]))
+	optUsage = '; '.join(optUsage) # FIXME fix the formatting: newlines are simply ignored
+	optOG = OptionGroup(op, 'optimization settings', optUsage)
+	optOG.add_option('-O', help='optimization level' , dest='optLevel', default=1, type='int')
+
+	op.add_option_group(optOG)
+
+	
+
+
 	options, args = op.parse_args()
 
 	if len(args) != 1:
 		op.error('only exactly 1 file at a time supported right now')
+	
+	if options.optLevel not in optPasses:
+		op.error('optimization level not supported')
+
 
 	fn = args[0]
 	path, fn = os.path.split(fn)
@@ -85,11 +126,19 @@ def main():
 	# build llvm IR
 	mt = ast2llvm.ModuleTranslator()
 	module, functions = mt.translateAST(ast)
-	ll = str(module)
+
+	# optimize IR
+	if options.optLevel != 0:
+		if options.saveTemps:
+			f = file('%s.preopt.ll' % baseFN, 'wt')
+			f.write(str(module))
+			f.close()
+
+		optimizeModule(module, optPasses[options.optLevel][1])
 
 	if options.saveTemps or options.asmOnly:
 		f = file('%s.ll' % baseFN, 'wt')
-		f.write(ll)
+		f.write(str(module))
 		f.close()
 
 	if options.asmOnly:
