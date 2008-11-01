@@ -193,7 +193,7 @@ def main():
 	# setup option parser
 	optparser = OptionParser()
 	optparser.add_option('-o', '--output', dest='astOutput', default='-')
-	optparser.add_option('-d', '--dot-output', dest='dotOutput', default=False, action="store_true")
+	optparser.add_option('-d', '--dot-output', dest='dotOutput', default=None)
 	optparser.add_option('-r', '--run', dest='run', default=False, action="store_true")
 
 	# get options

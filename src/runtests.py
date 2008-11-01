@@ -38,24 +38,34 @@ options = None
 args = None
 
 
-def runTest(filebase):
-	path, filename = os.path.split(filebase)
-
-	exitStatus = os.system('../src/exoself --save-temps %s.es' % filebase)
+def runExoself(filebase, opts):
+	exitStatus = os.system('../src/exoself %s %s.es' % (opts, filebase))
 	if os.WEXITSTATUS(exitStatus) != 0:
 		print 'compilation failed'
 		return False
 
+	return True
+
+
+
+def runTest(filebase):
+	path, filename = os.path.split(filebase)
+
+	if not runExoself(filebase, '-A'): # only ast
+		return False
 
 	# verify ast
 	if os.path.exists('%s.ast' % filebase):
 		expectedAST = file('%s.ast' % filebase).read()
-		expectedAST = ' '.join(expectedAST.split('\n')).strip()
+		expectedAST = ' '.join(expectedAST.split()).strip()
 
 		astString = file('../tests_tmp/%s.ast' % filename).read().strip()
 		if astString != expectedAST:
 			print 'received ast: %s\nexpected ast: %s' % (astString, expectedAST)
 			return False
+
+	if not runExoself(filebase, '-c'): # generate bitcode
+		return False
 
 	# run code, check return value
 	if os.path.exists('%s.ret' % filebase):

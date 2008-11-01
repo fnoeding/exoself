@@ -41,6 +41,7 @@ tokens {
 
 	MODULE;
 	DEFFUNC;
+	DEFFUNCARGS;
 	DEFVAR;
 	BLOCK;
 	SIMPLE_STATEMENT;
@@ -95,6 +96,7 @@ RCURLY: '}';
 LBRACKET: '[';
 RBRACKET: ']';
 ASSIGN: '=';
+COMMA: ',';
 
 
 start_module: global_stmt* EOF-> ^(MODULE global_stmt*);
@@ -113,7 +115,8 @@ return_stmt: 'return'^ expr?;
 
 defvar: n=NAME 'as' t=NAME -> ^(DEFVAR $n $t);
 
-deffunc: 'def' NAME LPAREN RPAREN 'as' NAME block -> ^(DEFFUNC NAME NAME block);
+deffunc: 'def' NAME LPAREN deffuncargs RPAREN 'as' NAME block -> ^(DEFFUNC NAME NAME deffuncargs block);
+deffuncargs: (NAME 'as' NAME COMMA)* (NAME 'as' NAME)? -> ^(DEFFUNCARGS NAME*);
 
 block: LCURLY
 			(simple_stmt SEMI+)*
@@ -128,7 +131,7 @@ factor:
 	| MINUS^ factor
 	| power;
 power: atom;
-atom: LPAREN expr RPAREN
+atom: LPAREN expr RPAREN -> expr
 	| integer_constant
 	| float_constant
 	| variable_name
@@ -142,6 +145,6 @@ float_constant:
 
 variable_name: NAME -> ^(VARIABLE NAME);
 
-function_call: NAME LPAREN RPAREN -> ^(CALLFUNC NAME);
+function_call: NAME LPAREN (expr (COMMA expr)* COMMA?)? RPAREN -> ^(CALLFUNC NAME expr*);
 
 

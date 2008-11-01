@@ -3,3 +3,4 @@ src/grammar/exoselfLexer.py
 src/grammar/exoselfParser.py
 src/grammar/exoself.tokens
 src/grammar/exoself__.g
+tests_tmp/*

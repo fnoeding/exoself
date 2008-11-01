@@ -27,6 +27,8 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 # 
+from __future__ import with_statement
+
 import setuppaths
 
 from llvm import *
@@ -40,6 +42,56 @@ def _childrenIterator(tree):
 		yield tree.getChild(i)
 
 
+class _ScopeStackWithProxy(object):
+	def __init__(self, ss):
+		self._ss = ss
+
+	def __enter__(self):
+		self._ss.pushScope()
+
+	def __exit__(self, type, value, tb):
+		self._ss.popScope()
+
+
+
+class _ScopeStack(object):
+	def __init__(self):
+		self._stack = {0: {}}
+		self._currentLevel = 0
+
+
+	def popScope(self):
+		assert(self._currentLevel > 0)
+
+		del self._stack[self._currentLevel]
+		self._currentLevel -= 1
+
+
+	def pushScope(self):
+		self._currentLevel += 1
+		self._stack[self._currentLevel] = {}
+
+
+	def add(self, name, ref, allowOverwriting=False):
+		if not allowOverwriting:
+			assert(not self.find(name))
+
+		self._stack[self._currentLevel][name] = ref
+
+
+	def find(self, name):
+		for x in range(self._currentLevel, -1, -1):
+			m = self._stack[x]
+			try:
+				return m[name]
+			except:
+				pass
+
+		return None
+
+
+
+
 class ModuleTranslator(object):
 	def __init__(self):
 		self._dispatchTable = {}
@@ -51,6 +103,7 @@ class ModuleTranslator(object):
 		self._dispatchTable['INTEGER_CONSTANT'] = self._onIntegerConstant
 		self._dispatchTable['FLOAT_CONSTANT'] = self._onFloatConstant
 		self._dispatchTable['CALLFUNC'] = self._onCallFunc
+		self._dispatchTable['VARIABLE'] = self._onVariable
 		self._dispatchTable['+'] = self._onBasicMathOperator
 		self._dispatchTable['-'] = self._onBasicMathOperator
 		self._dispatchTable['*'] = self._onBasicMathOperator
@@ -64,6 +117,7 @@ class ModuleTranslator(object):
 		assert(tree.getText() == 'MODULE')
 
 		self._module = Module.new('main_module')
+		self._scopeStack = _ScopeStack()
 
 		for x in _childrenIterator(tree):
 			self._dispatch(x)
@@ -71,34 +125,58 @@ class ModuleTranslator(object):
 
 	def _onDefFunction(self, tree):
 		assert(tree.getText() == 'DEFFUNC')
+		
+		with _ScopeStackWithProxy(self._scopeStack):
 
-		ci = _childrenIterator(tree)
-		name = ci.next().getText()
-		returnType = ci.next().getText()
+			ci = _childrenIterator(tree)
+			name = ci.next().getText()
+			returnType = ci.next().getText()
+			argList = ci.next()
 
-		if returnType == 'int32':
-			ty_ret = Type.int(32)
-		elif returnType == 'void':
-			ty_ret = Type.void()
-		else:
-			raise NotImplementedError('unsupported type: %s' % returnType)
+			if returnType == 'int32':
+				ty_ret = Type.int(32)
+			elif returnType == 'void':
+				ty_ret = Type.void()
+			else:
+				raise NotImplementedError('unsupported type: %s' % returnType)
 
-		ty_funcProto = Type.function(ty_ret, [])
-		ty_func = self._module.add_function(ty_funcProto, name)
 
-		self._currentFunction = ty_func
-		self._functions[name] = ty_func
+			functionParam_ty = []
+			functionParamNames = []
+			for i in range(argList.getChildCount() / 2):
+				argName = argList.getChild(i * 2).getText()
+				argTypeName = argList.getChild(i * 2 + 1).getText()
 
-		for x in ci:
-			self._currentBB = ty_func.append_basic_block('entry')
-			self._currentBuilder = Builder.new(self._currentBB)
-			
-			self._onBlock(x)
+				if argTypeName == 'int32':
+					arg_ty = Type.int(32)
+				else:
+					raise NotImplementedError('unsupported type: %s' % typeName)
 
-		if returnType == 'void':
-			self._currentBuilder.ret_void()
+				functionParam_ty.append(arg_ty)
+				functionParamNames.append(argName)
 
-		ty_func.verify()
+
+			ty_funcProto = Type.function(ty_ret, functionParam_ty)
+			ty_func = self._module.add_function(ty_funcProto, name)
+
+			for i,x in enumerate(functionParamNames):
+				ty_func.args[i].name = x
+				self._scopeStack.add(x, ty_func.args[i])
+
+			self._currentFunction = ty_func
+			self._functions[name] = ty_func
+
+			for x in ci:
+				self._currentBB = ty_func.append_basic_block('entry')
+				self._currentBuilder = Builder.new(self._currentBB)
+				
+				self._onBlock(x)
+
+			if returnType == 'void':
+				self._currentBuilder.ret_void()
+
+			ty_func.verify()
+
 
 	def _onBlock(self, tree):
 		assert(tree.getText() == 'BLOCK')
@@ -151,16 +229,30 @@ class ModuleTranslator(object):
 		return Constant.real(ty_float, f) # FIXME use float
 
 
+	def _onVariable(self, tree):
+		assert(tree.getText() == 'VARIABLE')
+
+		varName = tree.getChild(0).getText()
+		ref = self._scopeStack.find(varName)
+		assert(ref and 'variable was not defined')
+
+		return ref
+		
+
+
 	def _onCallFunc(self, tree):
 		assert(tree.getText() == 'CALLFUNC')
 
-		callee = tree.getChild(0).getText()
+		ci = _childrenIterator(tree)
+		callee = ci.next().getText()
+		assert(callee in self._functions and 'function not found')
 
-		assert(tree.getChildCount() == 1) # FIXME must be removed for function arguments
+		params = []
+		for x in ci:
+			r = self._dispatch(x)
+			params.append(r)
 
-		assert(callee in self._functions) # TODO improve this --> better error handling
-
-		return self._currentBuilder.call(self._functions[callee], [], 'ret_%s' % callee)
+		return self._currentBuilder.call(self._functions[callee], params, 'ret_%s' % callee)
 
 	def _onBasicMathOperator(self, tree):
 		nodeType = tree.getText()
