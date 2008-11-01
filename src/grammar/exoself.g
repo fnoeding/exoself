@@ -57,6 +57,7 @@ DEF: 'def';
 AS: 'as';
 PASS: 'pass';// in principle not needed, since we are using no significant whitespace. But reserve it for later extension in that direction
 RETURN: 'return';
+ASSERT: 'assert';
 OR: 'or';
 XOR: 'xor';
 AND: 'and';
@@ -111,6 +112,7 @@ COMMA: ',';
 LESS: '<';
 LESSEQUAL: '<=';
 EQUAL: '==';
+NOTEQUAL: '!=';
 GREATEREQUAL: '>=';
 GREATER: '>';
 
@@ -118,7 +120,7 @@ start_module: global_stmt* EOF-> ^(MODULE global_stmt*);
 
 global_stmt: deffunc;
 
-simple_stmt: pass_stmt | return_stmt | expr | defvar | assign_stmt;
+simple_stmt: pass_stmt | return_stmt | expr | defvar | assign_stmt | assert_stmt;
 
 assign_stmt: simple_assign;
 simple_assign: NAME ASSIGN expr -> ^(ASSIGN NAME expr);
@@ -126,6 +128,7 @@ simple_assign: NAME ASSIGN expr -> ^(ASSIGN NAME expr);
 
 pass_stmt: PASS^;
 return_stmt: RETURN^ expr?;
+assert_stmt: ASSERT^ expr;
 
 
 defvar: n=NAME AS t=NAME -> ^(DEFVAR $n $t);
@@ -144,8 +147,8 @@ xor_test: and_test (XOR^ and_test)*;
 and_test: not_test (AND^ not_test)*;
 not_test: NOT^ not_test | comparison;
 
-comparison: arith_expr (comp_op arith_expr)*;
-comp_op: LESS | LESSEQUAL | EQUAL | GREATEREQUAL | GREATER;
+comparison: arith_expr (comp_op^ arith_expr)*;
+comp_op: LESS | LESSEQUAL | EQUAL | NOTEQUAL | GREATEREQUAL | GREATER;
 
 expr: test_expr;// was: arith_expr
 arith_expr: term ((PLUS^ | MINUS^) term)*;

@@ -100,6 +100,7 @@ class ModuleTranslator(object):
 		self._dispatchTable['BLOCK'] = self._onBlock
 		self._dispatchTable['pass'] = self._onPass
 		self._dispatchTable['return'] = self._onReturn
+		self._dispatchTable['assert'] = self._onAssert
 		self._dispatchTable['INTEGER_CONSTANT'] = self._onIntegerConstant
 		self._dispatchTable['FLOAT_CONSTANT'] = self._onFloatConstant
 		self._dispatchTable['CALLFUNC'] = self._onCallFunc
@@ -117,6 +118,7 @@ class ModuleTranslator(object):
 		self._dispatchTable['<'] = self._onBasicOperator
 		self._dispatchTable['<='] = self._onBasicOperator
 		self._dispatchTable['=='] = self._onBasicOperator
+		self._dispatchTable['!='] = self._onBasicOperator
 		self._dispatchTable['>='] = self._onBasicOperator
 		self._dispatchTable['>'] = self._onBasicOperator
 
@@ -242,6 +244,40 @@ class ModuleTranslator(object):
 		value = self._dispatch(tree.getChild(0))
 		self._currentBuilder.ret(value)
 
+	def _onAssert(self, tree):
+		assert(tree.getText() == 'assert')
+
+		# TODO add a compiler switch to disable asserts, so they become noop's
+		# TODO add a compiler switch to disable inclusion of context data
+
+		value = self._dispatch(tree.getChild(0))
+		value = self._currentBuilder.icmp(IPRED_EQ, value, Constant.int(value.type, 0))
+
+		# if value is statically available bail out now / warn
+		# this does not work... investigate later
+		#if value == Constant.int(Type.int(1), 0):
+		#	print 'assert is always False in %s:%d' % ('???', tree.getLine())
+
+		# now implement an if
+
+		thenBB = self._currentFunction.append_basic_block('then') # getInsertBlock; trap path
+		elseBB = self._currentFunction.append_basic_block('else') # BasicBlock(None) # TODO check if this is really ok
+		mergeBB = self._currentFunction.append_basic_block('merge') # BasicBlock(None) # TODO check if this is really ok
+
+		self._currentBuilder.cbranch(value, thenBB, elseBB)
+
+
+		thenBuilder = Builder.new(thenBB)
+		trapFunc = Function.intrinsic(self._module, INTR_TRAP, []);
+		thenBuilder.call(trapFunc, [])
+		thenBuilder.branch(mergeBB) # we'll never get here - but create proper structure of IR
+	
+		elseBuilder = Builder.new(elseBB)
+		elseBuilder.branch(mergeBB)
+
+		self._currentBuilder = Builder.new(mergeBB)
+
+
 
 	def _onPass(self, tree):
 		assert(tree.getText() == 'pass')
@@ -306,7 +342,7 @@ class ModuleTranslator(object):
 
 	def _onBasicOperator(self, tree):
 		nodeType = tree.getText()
-		if tree.getChildCount() == 2 and nodeType in '''* // % / and xor or + -'''.split():
+		if tree.getChildCount() == 2 and nodeType in '''* // % / and xor or + - < <= == != >= >'''.split():
 			first = tree.getChild(0)
 			second = tree.getChild(1)
 
@@ -346,6 +382,17 @@ class ModuleTranslator(object):
 
 				# and go back to int32
 				return self._currentBuilder.zext(r, Type.int(32))
+			elif nodeType in '< <= == != >= >'.split():
+				m = {}
+				m['<'] = IPRED_SLT
+				m['<='] = IPRED_SLE
+				m['=='] = IPRED_EQ
+				m['!='] = IPRED_NE
+				m['>='] = IPRED_SGE
+				m['>'] = IPRED_SGT
+				pred = m[nodeType]
+
+				return self._currentBuilder.icmp(pred, v1, v2)
 			else:
 				assert('should never get here')
 		elif tree.getChildCount() == 1 and nodeType in '''- + not'''.split():
