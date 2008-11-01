@@ -52,6 +52,13 @@ tokens {
 }
 
 
+// keywords
+DEF: 'def';
+AS: 'as';
+PASS: 'pass';// in principle not needed, since we are using no significant whitespace. But reserve it for later extension in that direction
+RETURN: 'return';
+
+
 fragment LowercaseLetter: 'a' .. 'z';
 fragment UppercaseLetter: 'A' .. 'Z';
 fragment Letter: LowercaseLetter | UppercaseLetter;
@@ -73,7 +80,8 @@ NAME: (Letter | '_') (Letter | Digit | '_')*;
 
 
 
-COMMNENT: '#' (~('\n' | '\r'))* ('\n' | '\r' ('\n')?) {$channel=HIDDEN};
+COMMENT: '#' (~('\n' | '\r'))* ('\n' | '\r' ('\n')?) {$channel=HIDDEN};
+MULTILINE_COMMENT: '/*' (options {greedy=false;}: ~('*/'))* '*/' {$channel=HIDDEN};
 
 NEWLINE: (('\r')? '\n')+ {$channel=HIDDEN};
 WS: (' ' | '\t')+ {$channel=HIDDEN;};
@@ -98,7 +106,6 @@ RBRACKET: ']';
 ASSIGN: '=';
 COMMA: ',';
 
-
 start_module: global_stmt* EOF-> ^(MODULE global_stmt*);
 
 global_stmt: deffunc;
@@ -109,14 +116,14 @@ assign_stmt: simple_assign;
 simple_assign: NAME ASSIGN expr -> ^(ASSIGN NAME expr);
 
 
-pass_stmt: 'pass'^;
-return_stmt: 'return'^ expr?;
+pass_stmt: PASS^;
+return_stmt: RETURN^ expr?;
 
 
-defvar: n=NAME 'as' t=NAME -> ^(DEFVAR $n $t);
+defvar: n=NAME AS t=NAME -> ^(DEFVAR $n $t);
 
-deffunc: 'def' NAME LPAREN deffuncargs RPAREN 'as' NAME (block | SEMI) -> ^(DEFFUNC NAME NAME deffuncargs block?);
-deffuncargs: (NAME 'as' NAME COMMA)* (NAME 'as' NAME)? -> ^(DEFFUNCARGS NAME*);
+deffunc: DEF NAME LPAREN deffuncargs RPAREN AS NAME (block | SEMI) -> ^(DEFFUNC NAME NAME deffuncargs block?);
+deffuncargs: (NAME AS NAME COMMA)* (NAME AS NAME)? -> ^(DEFFUNCARGS NAME*);
 
 block: LCURLY
 			(simple_stmt SEMI+)*
