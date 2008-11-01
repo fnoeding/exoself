@@ -260,9 +260,8 @@ class ModuleTranslator(object):
 
 		# now implement an if
 
-		thenBB = self._currentFunction.append_basic_block('then') # getInsertBlock; trap path
-		elseBB = self._currentFunction.append_basic_block('else') # BasicBlock(None) # TODO check if this is really ok
-		mergeBB = self._currentFunction.append_basic_block('merge') # BasicBlock(None) # TODO check if this is really ok
+		thenBB = self._currentFunction.append_basic_block('assert_true') # getInsertBlock; trap path
+		elseBB = self._currentFunction.append_basic_block('assert_false') # BasicBlock(None) # TODO check if this is really ok
 
 		self._currentBuilder.cbranch(value, thenBB, elseBB)
 
@@ -270,12 +269,9 @@ class ModuleTranslator(object):
 		thenBuilder = Builder.new(thenBB)
 		trapFunc = Function.intrinsic(self._module, INTR_TRAP, []);
 		thenBuilder.call(trapFunc, [])
-		thenBuilder.branch(mergeBB) # we'll never get here - but create proper structure of IR
+		thenBuilder.branch(elseBB) # we'll never get here - but create proper structure of IR
 	
-		elseBuilder = Builder.new(elseBB)
-		elseBuilder.branch(mergeBB)
-
-		self._currentBuilder = Builder.new(mergeBB)
+		self._currentBuilder = Builder.new(elseBB)
 
 
 
