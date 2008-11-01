@@ -54,7 +54,7 @@ def runTest(filebase):
 	if not runExoself(filebase, '-A'): # only ast
 		return False
 
-	# verify ast
+	# verify ast (if available)
 	if os.path.exists('%s.ast' % filebase):
 		expectedAST = file('%s.ast' % filebase).read()
 		expectedAST = ' '.join(expectedAST.split()).strip()
@@ -68,19 +68,22 @@ def runTest(filebase):
 		return False
 
 	# run code, check return value
+	# when no return code file is available default to zero
 	if os.path.exists('%s.ret' % filebase):
 		expectedRetval = file('%s.ret' % filebase).read().strip()
 		expectedRetval = int(expectedRetval) & 0xFF
 
 		if expectedRetval < 0:
 			expectedRetval = 256 - abs(expectedRetval)
+	else:
+		expectedRetval = 0
 
 
-		exitStatus = os.system('%s ../tests_tmp/%s.bc' % (options.lli, filename))
-		retVal = os.WEXITSTATUS(exitStatus)
-		if retVal != expectedRetval:
-			print 'received ret: %d\nexpected ret: %s' % (retVal, expectedRetval)
-			return False
+	exitStatus = os.system('%s ../tests_tmp/%s.bc' % (options.lli, filename))
+	retVal = os.WEXITSTATUS(exitStatus)
+	if retVal != expectedRetval:
+		print 'received ret: %d\nexpected ret: %s' % (retVal, expectedRetval)
+		return False
 
 
 	return True
