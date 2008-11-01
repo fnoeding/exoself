@@ -195,6 +195,11 @@ class ModuleTranslator(object):
 		self._onDefProtoype(tree)
 		ty_func = self._functions[name]
 		ty_func.name = name
+
+		# differentiate between declarations and definitions
+		if tree.getChildCount() == 3:
+			# declaration
+			return
 	
 		with _ScopeStackWithProxy(self._scopeStack):
 			for i in range(len(ty_func.args)):

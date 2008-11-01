@@ -115,7 +115,7 @@ return_stmt: 'return'^ expr?;
 
 defvar: n=NAME 'as' t=NAME -> ^(DEFVAR $n $t);
 
-deffunc: 'def' NAME LPAREN deffuncargs RPAREN 'as' NAME block -> ^(DEFFUNC NAME NAME deffuncargs block);
+deffunc: 'def' NAME LPAREN deffuncargs RPAREN 'as' NAME (block | SEMI) -> ^(DEFFUNC NAME NAME deffuncargs block?);
 deffuncargs: (NAME 'as' NAME COMMA)* (NAME 'as' NAME)? -> ^(DEFFUNCARGS NAME*);
 
 block: LCURLY

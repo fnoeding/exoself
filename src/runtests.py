@@ -39,7 +39,7 @@ args = None
 
 
 def runExoself(filebase, opts):
-	exitStatus = os.system('../src/exoself %s %s.es' % (opts, filebase))
+	exitStatus = os.system('../src/exoself --save-temps %s %s.es' % (opts, filebase))
 	if os.WEXITSTATUS(exitStatus) != 0:
 		print 'compilation failed'
 		return False
