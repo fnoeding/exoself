@@ -35,6 +35,7 @@ from llvm import *
 from llvm.core import *
 from llvm.ee import *
 
+import copy
 
 def _childrenIterator(tree):
 	n = tree.getChildCount()
@@ -101,6 +102,7 @@ class ModuleTranslator(object):
 		self._dispatchTable['pass'] = self._onPass
 		self._dispatchTable['return'] = self._onReturn
 		self._dispatchTable['assert'] = self._onAssert
+		self._dispatchTable['if'] = self._onIf
 		self._dispatchTable['INTEGER_CONSTANT'] = self._onIntegerConstant
 		self._dispatchTable['FLOAT_CONSTANT'] = self._onFloatConstant
 		self._dispatchTable['CALLFUNC'] = self._onCallFunc
@@ -219,13 +221,23 @@ class ModuleTranslator(object):
 			self._functions[name] = ty_func
 
 			for x in ci:
-				self._currentBB = ty_func.append_basic_block('entry')
-				self._currentBuilder = Builder.new(self._currentBB)
+				currentBB = ty_func.append_basic_block('entry')
+				self._currentBuilder = Builder.new(currentBB)
 				
 				self._onBlock(x)
 
 			if returnType == 'void':
 				self._currentBuilder.ret_void()
+			else:
+				currentBB = self._currentBuilder.block
+				if not (currentBB.instructions and currentBB.instructions[-1].is_terminator):
+					# FIXME assert with a good description would be way better...
+					print 'control flow possibly reaches end of non-void function. Inserting trap instruction...'
+					trapFunc = Function.intrinsic(self._module, INTR_TRAP, []);
+					self._currentBuilder.call(trapFunc, [])
+					self._currentBuilder.ret(Constant.int(Type.int(32), -1)) # and return, otherwise ty_func.verify will fail
+					
+				
 
 			ty_func.verify()
 
@@ -260,7 +272,7 @@ class ModuleTranslator(object):
 
 		# now implement an if
 
-		thenBB = self._currentFunction.append_basic_block('assert_true') # getInsertBlock; trap path
+		thenBB = self._currentFunction.append_basic_block('assert_true') # trap path
 		elseBB = self._currentFunction.append_basic_block('assert_false') # BasicBlock(None) # TODO check if this is really ok
 
 		self._currentBuilder.cbranch(value, thenBB, elseBB)
@@ -272,6 +284,52 @@ class ModuleTranslator(object):
 		thenBuilder.branch(elseBB) # we'll never get here - but create proper structure of IR
 	
 		self._currentBuilder = Builder.new(elseBB)
+
+	def _onIf(self, tree):
+		assert(tree.getText() == 'if')
+		# children: expr block (expr block)* block?
+		#           if         else if       else
+		
+		# FIXME the bindings do not currently allow to create BasicBlock's that are not associated to any function
+		# so we always append to the end of the function
+		# in the generated code this will create a huge mess, but optimization should easily fix this
+	
+		mergeBB = self._currentFunction.append_basic_block('if_merge')
+		# iterate over all 'if' and 'else if' blocks
+		for i in range(tree.getChildCount() // 2):
+			cond = self._dispatch(tree.getChild(2 * i))
+			if cond.type != Type.int(1):
+				cond = self._currentBuilder.icmp(IPRED_NE, cond, Constant.int(cond.type, 0))
+			
+	
+			thenBB = self._currentFunction.append_basic_block('if_then')
+			elseBB = self._currentFunction.append_basic_block('if_else')
+
+			self._currentBuilder.cbranch(cond, thenBB, elseBB)
+
+			# generate code for then branch
+			self._currentBuilder = Builder.new(thenBB)
+			self._dispatch(tree.getChild(2 * i + 1))
+
+			# branch to mergeBB, but only if there was no terminator instruction
+			currentBB = self._currentBuilder.block
+			if not (currentBB.instructions and currentBB.instructions[-1].is_terminator):
+				self._currentBuilder.branch(mergeBB)
+
+			# continue with next else if / else
+			self._currentBuilder = Builder.new(elseBB)
+		if tree.getChildCount() % 2 == 1:
+			# generate code for else branch
+			self._dispatch(tree.getChild(tree.getChildCount() - 1))
+
+		# close last elseBB, but only if there was no terminator instruction
+		currentBB = self._currentBuilder.block
+		if not (currentBB.instructions and currentBB.instructions[-1].is_terminator):
+			self._currentBuilder.branch(mergeBB)
+
+		# continue in mergeBB
+		self._currentBuilder = Builder.new(mergeBB)
+		
 
 
 

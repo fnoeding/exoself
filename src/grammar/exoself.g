@@ -36,9 +36,6 @@ options {
 }
 
 tokens {
-	PASS;
-	RETURN;
-
 	MODULE;
 	DEFFUNC;
 	DEFFUNCARGS;
@@ -58,6 +55,9 @@ AS: 'as';
 PASS: 'pass';// in principle not needed, since we are using no significant whitespace. But reserve it for later extension in that direction
 RETURN: 'return';
 ASSERT: 'assert';
+IF: 'if';
+ELSE: 'else';
+ELIF: 'elif';
 OR: 'or';
 XOR: 'xor';
 AND: 'and';
@@ -120,7 +120,12 @@ start_module: global_stmt* EOF-> ^(MODULE global_stmt*);
 
 global_stmt: deffunc;
 
-simple_stmt: pass_stmt | return_stmt | expr | defvar | assign_stmt | assert_stmt;
+compound_stmt: simple_stmt | if_stmt;
+
+if_stmt: IF^ expr block (ELSE! IF! expr block)* (ELSE! block)?;
+
+
+simple_stmt: (pass_stmt | return_stmt | expr | defvar | assign_stmt | assert_stmt) (SEMI!+);
 
 assign_stmt: simple_assign;
 simple_assign: NAME ASSIGN expr -> ^(ASSIGN NAME expr);
@@ -137,8 +142,8 @@ deffunc: DEF NAME LPAREN deffuncargs RPAREN AS NAME (block | SEMI) -> ^(DEFFUNC 
 deffuncargs: (NAME AS NAME COMMA)* (NAME AS NAME)? -> ^(DEFFUNCARGS NAME*);
 
 block: LCURLY
-			(simple_stmt SEMI+)*
-		RCURLY -> ^(BLOCK simple_stmt*);
+			(compound_stmt)*
+		RCURLY -> ^(BLOCK compound_stmt*);
 
 
 test_expr: or_test;
@@ -150,7 +155,7 @@ not_test: NOT^ not_test | comparison;
 comparison: arith_expr (comp_op^ arith_expr)*;
 comp_op: LESS | LESSEQUAL | EQUAL | NOTEQUAL | GREATEREQUAL | GREATER;
 
-expr: test_expr;// was: arith_expr
+expr: test_expr;
 arith_expr: term ((PLUS^ | MINUS^) term)*;
 term: factor ((ASTERISK^ | SLASH^ | DOUBLESLASH^ | PERCENT^) factor)*;
 factor:

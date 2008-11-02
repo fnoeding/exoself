@@ -95,6 +95,7 @@ def main():
 
 	parser = OptionParser()
 	parser.add_option('-s', '--suite', help='test suite prefix', dest='suitePrefix', default='')
+	parser.add_option('-t', '--test', help='test prefix, ideally combined with suite prefix', dest='testPrefix', default='')
 	parser.add_option('-k', '--continue', help='continue even when tests fail', dest='continueAfterFailure', action='store_true', default=False)
 	parser.add_option('--lli', help='path to lli command', dest='lli', default='~/llvm/bin/lli')
 
@@ -123,6 +124,9 @@ def main():
 			l2 = os.listdir(e)
 			l2.sort()
 			for x in l2:
+				if options.testPrefix and not x.startswith(options.testPrefix):
+					continue
+
 				if not x.endswith('.es'):
 					continue
 				x = '%s/%s' % (e, x)
