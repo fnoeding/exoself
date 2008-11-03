@@ -129,7 +129,7 @@ if_stmt: IF^ expr block (ELSE! IF! expr block)* (ELSE! block)?;
 simple_stmt: (pass_stmt | return_stmt | expr | defvar | assign_stmt | assert_stmt) (SEMI!+);
 
 assign_stmt: simple_assign;
-simple_assign: NAME ASSIGN expr -> ^(ASSIGN NAME expr);
+simple_assign: (NAME ASSIGN)+ expr -> ^(ASSIGN NAME* expr);
 
 
 pass_stmt: PASS^;

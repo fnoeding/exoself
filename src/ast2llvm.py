@@ -107,6 +107,7 @@ class ModuleTranslator(object):
 		self._dispatchTable['FLOAT_CONSTANT'] = self._onFloatConstant
 		self._dispatchTable['CALLFUNC'] = self._onCallFunc
 		self._dispatchTable['VARIABLE'] = self._onVariable
+		self._dispatchTable['DEFVAR'] = self._onDefVariable
 		self._dispatchTable['+'] = self._onBasicOperator
 		self._dispatchTable['-'] = self._onBasicOperator
 		self._dispatchTable['*'] = self._onBasicOperator
@@ -124,6 +125,7 @@ class ModuleTranslator(object):
 		self._dispatchTable['!='] = self._onBasicOperator
 		self._dispatchTable['>='] = self._onBasicOperator
 		self._dispatchTable['>'] = self._onBasicOperator
+		self._dispatchTable['='] = self._onAssign
 
 
 	def _onModule(self, tree):
@@ -215,15 +217,26 @@ class ModuleTranslator(object):
 			return
 	
 		with _ScopeStackWithProxy(self._scopeStack):
-			for i in range(len(ty_func.args)):
-				self._scopeStack.add(ty_func.args[i].name, ty_func.args[i])
 
 			self._currentFunction = ty_func
 			self._functions[name] = ty_func
+			entryBB = ty_func.append_basic_block('entry')
 
+			# add variables
+			for i in range(len(ty_func.args)):
+				#self._scopeStack.add(ty_func.args[i].name, ty_func.args[i])
+				self._createAllocaForVar(ty_func.args[i].name, ty_func.args[i].type, ty_func.args[i])
+
+
+			addedBRToEntryBB = False
 			for x in ci:
-				currentBB = ty_func.append_basic_block('entry')
+				currentBB = ty_func.append_basic_block('bb')
 				self._currentBuilder = Builder.new(currentBB)
+
+				if not addedBRToEntryBB:
+					b = Builder.new(entryBB)
+					b.branch(currentBB)
+					addedBRToEntryBB = True
 				
 				self._onBlock(x)
 
@@ -375,10 +388,54 @@ class ModuleTranslator(object):
 
 		varName = tree.getChild(0).getText()
 		ref = self._scopeStack.find(varName)
-		assert(ref and 'variable was not defined')
+		assert(ref and 'variable was not defined: %s' % varName)
 
-		return ref
-		
+		#return ref
+
+		return self._currentBuilder.load(ref)
+
+
+	def _createAllocaForVar(self, name, type, value=None):
+		assert(not isinstance(type, str))
+
+		if type == Type.int(32):
+			defaultValue = Constant.int(type, 0)
+		else:
+			assert(0 and 'unsupported variable type: %s' % type)
+
+		if value == None:
+			value = defaultValue
+
+		# check if this variable is already defined
+		assert(not self._scopeStack.find(name) and 'variable already defined: %s' % name)
+
+		# use the usual LLVM pattern to create mutable variables: use alloca
+		# important: the mem2reg pass is limited to analyzing the entry block of functions,
+		# so all variables must be defined there
+
+		entryBB = self._currentFunction.get_entry_basic_block()
+		entryBuilder = Builder.new(entryBB)
+		# FIXME workaround: llvm-py segfaults when we call position_at_beginning on an empty block
+		if entryBB.instructions:
+			entryBuilder.position_at_beginning(entryBB)
+		var = entryBuilder.alloca(type, name)
+		entryBuilder.store(value, var)
+
+		self._scopeStack.add(name, var)
+
+
+	def _onDefVariable(self, tree):
+		assert(tree.getText() == 'DEFVAR')
+
+		varName = tree.getChild(0).getText()
+		varType = tree.getChild(1).getText()
+
+		if varType == 'int32':
+			varType = Type.int(32)
+		else:
+			assert(0 and 'unsuported variable type')
+
+		self._createAllocaForVar(varName, varType)
 
 
 	def _onCallFunc(self, tree):
@@ -458,7 +515,7 @@ class ModuleTranslator(object):
 
 				return self._currentBuilder.icmp(pred, v1, v2)
 			else:
-				assert('should never get here')
+				assert(0 and 'should never get here')
 		elif tree.getChildCount() == 1 and nodeType in '''- + not'''.split():
 			v1 = self._dispatch(tree.getChild(0))
 
@@ -476,6 +533,40 @@ class ModuleTranslator(object):
 		else:
 			raise NotImplementedError('basic operator \'%s\' not yet implemented' % nodeType)
 
+
+	def _onAssign(self, tree):
+		assert(tree.getText() == '=')
+
+		n = tree.getChildCount()
+		names = []
+		for i in range(n - 1):
+			names.append(tree.getChild(i).getText())
+
+		value = self._dispatch(tree.getChild(n - 1))
+
+		# TODO beware of problems when some of the variables already exist and have different types!
+
+		# variables may already exist, then just 'store' the new value
+		# otherwise create a new variable
+
+		for name in names:
+			ref = self._scopeStack.find(name)
+			if ref:
+				# variable already exists
+				self._currentBuilder.store(value, ref)
+			else:
+				# new variable
+				# do not pass value when creating the variable! The value is NOT available in the entry block (at least in general)!
+				#print value, repr(value)
+				#print value.type, repr(value.type)
+				self._createAllocaForVar(name, value.type)
+
+				ref = self._scopeStack.find(name)
+				self._currentBuilder.store(value, ref)
+
+
+
+		return self._currentBuilder.load(ref) # TODO
 
 
 	def _dispatch(self, tree):
