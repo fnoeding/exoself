@@ -126,6 +126,7 @@ class ModuleTranslator(object):
 		self._dispatchTable['>='] = self._onBasicOperator
 		self._dispatchTable['>'] = self._onBasicOperator
 		self._dispatchTable['='] = self._onAssign
+		self._dispatchTable['LISTASSIGN'] = self._onListAssign
 
 
 	def _onModule(self, tree):
@@ -533,6 +534,20 @@ class ModuleTranslator(object):
 		else:
 			raise NotImplementedError('basic operator \'%s\' not yet implemented' % nodeType)
 
+	def _simpleAssignment(self, name, value):
+		ref = self._scopeStack.find(name)
+		if ref:
+			# variable already exists
+			self._currentBuilder.store(value, ref)
+		else:
+			# new variable
+			# do not pass value when creating the variable! The value is NOT available in the entry block (at least in general)!
+			self._createAllocaForVar(name, value.type)
+
+			ref = self._scopeStack.find(name)
+			self._currentBuilder.store(value, ref)
+		
+		return ref
 
 	def _onAssign(self, tree):
 		assert(tree.getText() == '=')
@@ -544,29 +559,58 @@ class ModuleTranslator(object):
 
 		value = self._dispatch(tree.getChild(n - 1))
 
-		# TODO beware of problems when some of the variables already exist and have different types!
+		# transform assignments in the form
+		#     a = b = c = expr;
+		# to
+		#     c = expr; b = c; a = b;
+		# instead of
+		#     c = expr; b = expr; a = expr;
+		# this form avoids any problems related to already existing variables with different types
 
-		# variables may already exist, then just 'store' the new value
-		# otherwise create a new variable
-
+		lastResult = value;
 		for name in names:
-			ref = self._scopeStack.find(name)
-			if ref:
-				# variable already exists
-				self._currentBuilder.store(value, ref)
-			else:
-				# new variable
-				# do not pass value when creating the variable! The value is NOT available in the entry block (at least in general)!
-				#print value, repr(value)
-				#print value.type, repr(value.type)
-				self._createAllocaForVar(name, value.type)
+			ref = self._simpleAssignment(name, lastResult)
 
-				ref = self._scopeStack.find(name)
-				self._currentBuilder.store(value, ref)
+			if ref.type != lastResult.type:# when we get different types this gets finally called and must do some conversions
+				lastResult = self._currentBuilder.load(ref)
 
 
+		return lastResult # TODO really needed?
 
-		return self._currentBuilder.load(ref) # TODO
+	def _onListAssign(self, tree):
+		assert(tree.getText() == 'LISTASSIGN')
+
+		lhs = tree.getChild(0)
+		assert(lhs.getText() == 'ASSIGNLIST')
+		rhs = tree.getChild(1)
+		assert(rhs.getText() == 'ASSIGNLIST')
+
+		assert(lhs.getChildCount() == rhs.getChildCount() and 'different number of assignees and expressions')
+		n = rhs.getChildCount()
+
+		# use a very simple aproach:
+		# copy source variables into temporary variables
+		# copy data from temporary variables to destination variables
+		# this avoids difficult cases like: a,b = b,a or a,b,c = b,b,b
+		# but a,b = c,d is a bit slower - but the optimizer should transform that to an efficient version
+
+		# copy source -> temp
+		temps = []
+		for i in range(n):
+			value = self._dispatch(rhs.getChild(i))
+			ref = self._currentBuilder.alloca(value.type, 'listassign_tmp')
+			self._currentBuilder.store(value, ref)
+			temps.append(ref)
+
+		# copy temp -> destination
+		# this is a simple assignment
+		for i in range(n):
+			value = self._currentBuilder.load(temps[i])
+			destination = lhs.getChild(i).getText()
+
+			self._simpleAssignment(destination, value)
+
+
 
 
 	def _dispatch(self, tree):

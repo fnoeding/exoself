@@ -46,6 +46,8 @@ tokens {
 	FLOAT_CONSTANT;
 	VARIABLE;
 	CALLFUNC;
+	ASSIGNLIST;
+	LISTASSIGN;
 }
 
 
@@ -128,8 +130,11 @@ if_stmt: IF^ expr block (ELSE! IF! expr block)* (ELSE! block)?;
 
 simple_stmt: (pass_stmt | return_stmt | expr | defvar | assign_stmt | assert_stmt) (SEMI!+);
 
-assign_stmt: simple_assign;
+assign_stmt: simple_assign | list_assign;
 simple_assign: (NAME ASSIGN)+ expr -> ^(ASSIGN NAME* expr);
+list_assign: list_assign_lhs ASSIGN list_assign_rhs -> ^(LISTASSIGN list_assign_lhs list_assign_rhs);
+list_assign_lhs: NAME (COMMA NAME)+ -> ^(ASSIGNLIST NAME+);
+list_assign_rhs: expr (COMMA expr)+ -> ^(ASSIGNLIST expr+);
 
 
 pass_stmt: PASS^;
