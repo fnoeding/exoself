@@ -110,6 +110,7 @@ class ModuleTranslator(object):
 		self._dispatchTable['+'] = self._onBasicOperator
 		self._dispatchTable['-'] = self._onBasicOperator
 		self._dispatchTable['*'] = self._onBasicOperator
+		self._dispatchTable['**'] = self._onBasicOperator
 		self._dispatchTable['/'] = self._onBasicOperator
 		self._dispatchTable['//'] = self._onBasicOperator
 		self._dispatchTable['%'] = self._onBasicOperator
@@ -396,7 +397,7 @@ class ModuleTranslator(object):
 
 	def _onBasicOperator(self, tree):
 		nodeType = tree.getText()
-		if tree.getChildCount() == 2 and nodeType in '''* // % / and xor or + - < <= == != >= >'''.split():
+		if tree.getChildCount() == 2 and nodeType in '''* ** // % / and xor or + - < <= == != >= >'''.split():
 			first = tree.getChild(0)
 			second = tree.getChild(1)
 
@@ -405,6 +406,15 @@ class ModuleTranslator(object):
 
 			if nodeType == '*':
 				return self._currentBuilder.mul(v1, v2)
+			elif nodeType == '**':
+				# FIXME we are using the floating point power instead of an integer calculation
+				powiFunc = Function.intrinsic(self._module, INTR_POWI, [Type.double()])
+
+				# convert first argument to double
+				v1 = self._currentBuilder.sitofp(v1, Type.double())
+				
+				r = self._currentBuilder.call(powiFunc, [v1, v2])
+				return self._currentBuilder.fptosi(r, Type.int(32))
 			elif nodeType == '//':# integer division
 				return self._currentBuilder.sdiv(v1, v2)
 			elif nodeType == '/':# floating point division

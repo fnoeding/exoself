@@ -96,7 +96,8 @@ WS: (' ' | '\t')+ {$channel=HIDDEN;};
 SEMI: ';';
 PLUS: '+';
 MINUS: '-';
-ASTERISK: '*';
+STAR: '*';
+DOUBLESTAR: '**';
 PERCENT: '%';
 SLASH: '/';
 DOUBLESLASH: '//';
@@ -157,12 +158,15 @@ comp_op: LESS | LESSEQUAL | EQUAL | NOTEQUAL | GREATEREQUAL | GREATER;
 
 expr: test_expr;
 arith_expr: term ((PLUS^ | MINUS^) term)*;
-term: factor ((ASTERISK^ | SLASH^ | DOUBLESLASH^ | PERCENT^) factor)*;
+term: factor ((STAR^ | SLASH^ | DOUBLESLASH^ | PERCENT^) factor)*;
 factor:
 	PLUS^ factor
 	| MINUS^ factor
 	| power;
-power: atom;
+power: function_operator (DOUBLESTAR power -> ^(DOUBLESTAR function_operator power) | /*nothing*/ -> function_operator);
+function_operator:
+	(a=atom->$a) (NAME b=atom -> ^(CALLFUNC NAME $a $b))*;
+
 atom: LPAREN expr RPAREN -> expr
 	| integer_constant
 	| float_constant
