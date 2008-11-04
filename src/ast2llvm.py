@@ -103,6 +103,7 @@ class ModuleTranslator(object):
 		self._dispatchTable['return'] = self._onReturn
 		self._dispatchTable['assert'] = self._onAssert
 		self._dispatchTable['if'] = self._onIf
+		self._dispatchTable['for'] = self._onFor
 		self._dispatchTable['INTEGER_CONSTANT'] = self._onIntegerConstant
 		self._dispatchTable['FLOAT_CONSTANT'] = self._onFloatConstant
 		self._dispatchTable['CALLFUNC'] = self._onCallFunc
@@ -387,6 +388,69 @@ class ModuleTranslator(object):
 		# continue in mergeBB
 		self._currentBuilder = Builder.new(mergeBB)
 		
+
+	def _onFor(self, tree):
+		assert(tree.getText() == 'for')
+
+		loopVarName = tree.getChild(0).getText()
+		loopBody = tree.getChild(2)
+		loopExpression = tree.getChild(1)
+		assert(loopExpression.getText() == 'range')
+		assert(1 <= loopExpression.getChildCount() <= 3)
+		n = loopExpression.getChildCount()
+
+		with _ScopeStackWithProxy(self._scopeStack):
+			inductVar = self._scopeStack.find(loopVarName)
+			if inductVar:
+				assert(inductVar.type.pointee == Type.int(32)) # 'range' expects some kind of integer...
+			else:
+				inductVar = self._currentBuilder.alloca(Type.int(32), loopVarName)
+				self._scopeStack.add(loopVarName, inductVar)
+			start = Constant.int(inductVar.type.pointee, 0)
+			step = Constant.int(inductVar.type.pointee, 1)
+
+			if n == 1:
+				stop = self._dispatch(loopExpression.getChild(0))
+			elif n == 2:
+				start = self._dispatch(loopExpression.getChild(0))
+				stop = self._dispatch(loopExpression.getChild(1))
+			elif n == 3:
+				start = self._dispatch(loopExpression.getChild(0))
+				stop = self._dispatch(loopExpression.getChild(1))
+				step = self._dispatch(loopExpression.getChild(2))
+
+			# setup loop by initializing induction variable
+			self._currentBuilder.store(start, inductVar)
+
+			# create blocks
+			headBB = self._currentFunction.append_basic_block('head')
+			bodyBB = self._currentFunction.append_basic_block('body')
+			# TODO: think about implementing an 'else' block, that gets called when the loop does not get executed
+			mergeBB = self._currentFunction.append_basic_block('merge')
+
+			self._currentBuilder.branch(headBB)
+
+			# the head just tests the condition
+			headBuilder = Builder.new(headBB)
+			if 1:# FIXME
+				# step > 0
+				cond = headBuilder.icmp(IPRED_SLT, headBuilder.load(inductVar), stop)
+			headBuilder.cbranch(cond, bodyBB, mergeBB)
+
+			# build loop body
+			self._currentBuilder = Builder.new(bodyBB)
+			self._dispatch(loopBody)
+
+			# now increment inductVar and branch back to head for another round
+			r = self._currentBuilder.add(self._currentBuilder.load(inductVar), step)
+			self._currentBuilder.store(r, inductVar)
+			self._currentBuilder.branch(headBB)
+
+			# done! continue outside loop body
+			self._currentBuilder = Builder.new(mergeBB)
+
+
+
 
 
 
