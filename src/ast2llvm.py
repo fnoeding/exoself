@@ -404,8 +404,7 @@ class ModuleTranslator(object):
 			if inductVar:
 				assert(inductVar.type.pointee == Type.int(32)) # 'range' expects some kind of integer...
 			else:
-				inductVar = self._currentBuilder.alloca(Type.int(32), loopVarName)
-				self._scopeStack.add(loopVarName, inductVar)
+				inductVar = self._createAllocaForVar(loopVarName, Type.int(32))
 			start = Constant.int(inductVar.type.pointee, 0)
 			step = Constant.int(inductVar.type.pointee, 1)
 
@@ -423,19 +422,29 @@ class ModuleTranslator(object):
 			self._currentBuilder.store(start, inductVar)
 
 			# create blocks
-			headBB = self._currentFunction.append_basic_block('head')
+			headBB = self._currentFunction.append_basic_block('head') # decide between Up and Down
+			headDownBB = self._currentFunction.append_basic_block('headDown')
+			headUpBB = self._currentFunction.append_basic_block('headUp')
 			bodyBB = self._currentFunction.append_basic_block('body')
 			# TODO: think about implementing an 'else' block, that gets called when the loop does not get executed
 			mergeBB = self._currentFunction.append_basic_block('merge')
 
 			self._currentBuilder.branch(headBB)
 
-			# the head just tests the condition
-			headBuilder = Builder.new(headBB)
-			if 1:# FIXME
-				# step > 0
-				cond = headBuilder.icmp(IPRED_SLT, headBuilder.load(inductVar), stop)
-			headBuilder.cbranch(cond, bodyBB, mergeBB)
+			# count up or down?
+			b = Builder.new(headBB)
+			cond = b.icmp(IPRED_SGT, step, Constant.int(step.type, 0))
+			b.cbranch(cond, headUpBB, headDownBB)
+
+			# count down check
+			b = Builder.new(headDownBB)
+			cond = b.icmp(IPRED_SGT, b.load(inductVar), stop)
+			b.cbranch(cond, bodyBB, mergeBB)
+
+			# count up check
+			b = Builder.new(headUpBB)
+			cond = b.icmp(IPRED_SLT, b.load(inductVar), stop)
+			b.cbranch(cond, bodyBB, mergeBB)
 
 			# build loop body
 			self._currentBuilder = Builder.new(bodyBB)
@@ -529,6 +538,8 @@ class ModuleTranslator(object):
 		entryBuilder.store(value, var)
 
 		self._scopeStack.add(name, var)
+
+		return var
 
 
 	def _onDefVariable(self, tree):
