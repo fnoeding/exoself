@@ -1,4 +1,7 @@
 *.pyc
+3rdparty/llvm-py/www
+3rdparty/llvm-py/build
+3rdparty/pylibs/llvm
 src/grammar/exoselfLexer.py
 src/grammar/exoselfParser.py
 src/grammar/exoself.tokens

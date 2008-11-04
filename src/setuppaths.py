@@ -33,7 +33,6 @@ import sys
 import os
 
 
-sys.path.append(os.path.normpath(os.path.join(sys.path[0], '..', '3rdparty', 'llvm', 'py'))) 
-sys.path.append(os.path.normpath(os.path.join(sys.path[0], '..', '3rdparty', 'antlr', 'pyruntime'))) 
+sys.path.append(os.path.normpath(os.path.join(sys.path[0], '..', '3rdparty', 'pylibs')))
 sys.path.append(os.path.normpath(os.path.join(sys.path[0], 'grammar'))) 
 

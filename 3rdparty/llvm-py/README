@@ -1,0 +1,41 @@
+
+llvm-py: Python Bindings for LLVM
+---------------------------------
+
+llvm-py provides Python bindings for LLVM.
+
+
+Home page:
+----------
+    http://mdevan.nfshost.com/llvm-py/
+
+
+Versions:
+---------
+
+This package will work only with LLVM 2.3 release version. If you need llvm-py
+for the in-progress LLVM version (2.4), you've to get llvm-py from the SVN
+repository -- see the website for more details.
+
+
+Quickstart:
+-----------
+    1. Get 2.3 version of LLVM, build it. Make sure '--enable-pic' is passed to
+       LLVM's 'configure'.
+
+    2. Unpack llvm-py, build and install:
+
+        $ tar jxvf llvm-py-0.3.tar.bz2
+        $ cd llvm-py-0.3
+        # Locate llvm-config, usually under <llvm>/Release/bin
+        $ sudo python setup.py install --llvm-config=/path/to/llvm-config
+
+    3. See examples under 'test' directory.
+
+
+LICENSE:
+--------
+    llvm-py is distributed under the new BSD license, which is similar to
+    the LLVM license itself. See the file called LICENSE for the full license
+    text.
+
