@@ -128,12 +128,28 @@ class ModuleTranslator(object):
 		self._dispatchTable['='] = self._onAssign
 		self._dispatchTable['LISTASSIGN'] = self._onListAssign
 
+	def _addHelperFunctions(self):
+		# puts
+		retType= Type.int(32)
+		parameterTypes = []
+		parameterTypes.append(Type.pointer(Type.int(8)))
+		functionType = Type.function(retType, parameterTypes)
+		self._module.add_function(functionType, 'puts')
+
+		# abort
+		functionType = Type.function(Type.void(), [])
+		self._module.add_function(functionType, 'abort')
+
+
 
 	def _onModule(self, tree):
 		assert(tree.getText() == 'MODULE')
 
 		self._module = Module.new('main_module')
 		self._scopeStack = _ScopeStack()
+
+		# add some helper functions / prototypes / ... to the module
+		self._addHelperFunctions()
 
 		# first pass: make all functions available, so we don't need any stupid forward declarations
 		for x in _childrenIterator(tree):
@@ -216,7 +232,7 @@ class ModuleTranslator(object):
 		if tree.getChildCount() == 3:
 			# declaration
 			return
-	
+
 		with _ScopeStackWithProxy(self._scopeStack):
 
 			self._currentFunction = ty_func
@@ -238,7 +254,7 @@ class ModuleTranslator(object):
 					b = Builder.new(entryBB)
 					b.branch(currentBB)
 					addedBRToEntryBB = True
-				
+
 				self._onBlock(x)
 
 			if returnType == 'void':
@@ -260,8 +276,9 @@ class ModuleTranslator(object):
 	def _onBlock(self, tree):
 		assert(tree.getText() == 'BLOCK')
 
-		for x in _childrenIterator(tree):
-			self._dispatch(x)
+		with _ScopeStackWithProxy(self._scopeStack):
+			for x in _childrenIterator(tree):
+				self._dispatch(x)
 
 
 
@@ -294,8 +311,33 @@ class ModuleTranslator(object):
 
 
 		thenBuilder = Builder.new(thenBB)
-		trapFunc = Function.intrinsic(self._module, INTR_TRAP, []);
-		thenBuilder.call(trapFunc, [])
+
+		# build error string
+		if tree.line:
+			errorStringConst = 'assert failed! file %s line %d:\n' % (self._filename, tree.line)
+
+			start = max(tree.line - 1 - 5, 0)
+			stop = min(tree.line - 1 + 1, len(self._sourcecodeLines))
+			for i in range(start, stop):
+				errorStringConst += '% 5d: %s' % (i + 1, self._sourcecodeLines[i])
+				if i != stop - 1:
+					errorStringConst += '\n'
+			errorStringConst += ' # <----- failed\n'
+		else:
+			errorStringConst = '(unknown) assert failed!'
+		errorStringConst = Constant.stringz(errorStringConst);
+		errorString = self._module.add_global_variable(errorStringConst.type, 'assertErrorString')
+		errorString.initializer = errorStringConst
+		errorString.global_constant = True
+
+		idx = [Constant.int(Type.int(32), 0), Constant.int(Type.int(32), 0)]
+		errorStringGEP = errorString.gep(idx)
+		puts = self._module.get_function_named('puts')
+		thenBuilder.call(puts, [errorStringGEP])
+
+		# emit abort
+		abortFunc = self._module.get_function_named('abort')
+		thenBuilder.call(abortFunc, [])
 		thenBuilder.branch(elseBB) # we'll never get here - but create proper structure of IR
 	
 		self._currentBuilder = Builder.new(elseBB)
@@ -618,8 +660,12 @@ class ModuleTranslator(object):
 
 
 
-	def translateAST(self, tree):
+	def translateAST(self, tree, filename='', sourcecode=''):
 		assert(tree.getText() == 'MODULE')
+
+		self._filename = filename
+		self._sourcecode = sourcecode
+		self._sourcecodeLines = sourcecode.splitlines()
 
 		self._module = None
 		self._functions = {}

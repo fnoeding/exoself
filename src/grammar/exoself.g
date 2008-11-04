@@ -35,6 +35,11 @@ options {
 	language = Python;
 }
 
+//****************************************************************************
+// Lexer
+//****************************************************************************
+
+
 tokens {
 	MODULE;
 	DEFFUNC;
@@ -48,6 +53,7 @@ tokens {
 	CALLFUNC;
 	ASSIGNLIST;
 	LISTASSIGN;
+	FOREXPRESSION;
 }
 
 
@@ -60,11 +66,15 @@ ASSERT: 'assert';
 IF: 'if';
 ELSE: 'else';
 ELIF: 'elif';
+FOR: 'for';
+IN: 'in';
 OR: 'or';
 XOR: 'xor';
 AND: 'and';
 NOT: 'not';
 
+
+// literals
 fragment LowercaseLetter: 'a' .. 'z';
 fragment UppercaseLetter: 'A' .. 'Z';
 fragment Letter: LowercaseLetter | UppercaseLetter;
@@ -85,7 +95,7 @@ NAME: (Letter | '_') (Letter | Digit | '_')*;
 
 
 
-
+// whitespace, comments
 COMMENT: '#' (~('\n' | '\r'))* ('\n' | '\r' ('\n')?) {$channel=HIDDEN};
 MULTILINE_COMMENT: '/*' (options {greedy=false;}: ~('*/'))* '*/' {$channel=HIDDEN};
 
@@ -94,7 +104,7 @@ WS: (' ' | '\t')+ {$channel=HIDDEN;};
 
 
 
-
+// operators
 SEMI: ';';
 PLUS: '+';
 MINUS: '-';
@@ -119,13 +129,22 @@ NOTEQUAL: '!=';
 GREATEREQUAL: '>=';
 GREATER: '>';
 
+
+//***************************************************************************
+// Parser
+//***************************************************************************
+
+
 start_module: global_stmt* EOF-> ^(MODULE global_stmt*);
 
 global_stmt: deffunc;
 
-compound_stmt: simple_stmt | if_stmt;
+compound_stmt: simple_stmt | if_stmt | for_stmt;
 
 if_stmt: IF^ expr block (ELSE! IF! expr block)* (ELSE! block)?;
+
+for_stmt: FOR^ NAME IN for_expression block;
+for_expression: 'range'^ LPAREN expr (COMMA! expr (COMMA! expr)?)? RPAREN;
 
 
 simple_stmt: (pass_stmt | return_stmt | expr | defvar | assign_stmt | assert_stmt) (SEMI!+);
@@ -158,8 +177,9 @@ deffunc: DEF NAME LPAREN deffuncargs RPAREN AS NAME (block | SEMI) -> ^(DEFFUNC 
 deffuncargs: (NAME AS NAME COMMA)* (NAME AS NAME)? -> ^(DEFFUNCARGS NAME*);
 
 block: LCURLY
-			(compound_stmt)*
-		RCURLY -> ^(BLOCK compound_stmt*);
+			block_content*
+		RCURLY -> ^(BLOCK block_content*);
+block_content: block | compound_stmt;
 
 
 test_expr: or_test;

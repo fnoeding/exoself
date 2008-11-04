@@ -1,7 +1,7 @@
 
 def main() as int32
 {
-	assert not 42;# this fill cause a trap --> SIGILL --> exit code 132
+	assert not 42;# this will cause an abort --> SIGABRT --> exit code 134
 
 	return 42;
 }

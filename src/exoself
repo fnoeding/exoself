@@ -125,7 +125,7 @@ def main():
 
 	# build llvm IR
 	mt = ast2llvm.ModuleTranslator()
-	module, functions = mt.translateAST(ast)
+	module, functions = mt.translateAST(ast, fn, source)
 
 	# optimize IR
 	if options.optLevel != 0:
