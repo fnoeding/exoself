@@ -66,6 +66,9 @@ class MyLexer(exoselfLexer.exoselfLexer):
 
 		self.emitErrorMessage(s)
 		
+	def getRuleInvocationStack(self):
+		return self._getRuleInvocationStack(exoselfLexer.exoselfLexer.__module__)
+
 
 	
 class MyParser(exoselfParser.exoselfParser):
@@ -113,25 +116,17 @@ class MyParser(exoselfParser.exoselfParser):
 
 		self.emitErrorMessage(s)
 
+	def getRuleInvocationStack(self):
+		return self._getRuleInvocationStack(exoselfParser.exoselfParser.__module__)
 
-	def isPreviousTokenNewline(self):# used to detect end of line while NEWLINE is on channel HIDDEN
-		if type(self) == MyLexer:
-			from IPython.Shell import IPShellEmbed
-			IPShellEmbed()()
 
-		idx = self.input.index()
-		previousToken = self.input.getTokens(idx - 1, idx)[0]
 
-		if previousToken.getType() == NEWLINE:
-			return True
-		return False
+
 
 
 def sourcecode2AST(source, type='module'):
 	# append additional NEWLINE at end of file
 	source += '\n'
-
-	# TODO preprocess sources to add all necessary ';' and '{' and '}'...
 
 	inputStream = antlr3.ANTLRStringStream(source)
 	lexer = MyLexer(inputStream, source)
