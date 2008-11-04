@@ -68,6 +68,8 @@ ELSE: 'else';
 ELIF: 'elif';
 FOR: 'for';
 IN: 'in';
+BREAK: 'break';
+CONTINUE: 'continue';
 OR: 'or';
 XOR: 'xor';
 AND: 'and';
@@ -147,7 +149,7 @@ for_stmt: FOR^ NAME IN! for_expression block;
 for_expression: 'range'^ LPAREN! expr (COMMA! expr (COMMA! expr)?)? RPAREN!;
 
 
-simple_stmt: (pass_stmt | return_stmt | expr | defvar | assign_stmt | assert_stmt) (SEMI!+);
+simple_stmt: (pass_stmt | return_stmt | expr | defvar | assign_stmt | assert_stmt | break_stmt | continue_stmt) (SEMI!+);
 
 assign_stmt: simple_assign | list_assign | aug_assign;
 simple_assign: (NAME ASSIGN)+ expr -> ^(ASSIGN NAME* expr);
@@ -169,6 +171,8 @@ aug_assign:
 pass_stmt: PASS^;
 return_stmt: RETURN^ expr?;
 assert_stmt: ASSERT^ expr;
+break_stmt: BREAK^;
+continue_stmt: CONTINUE^;
 
 
 defvar: n=NAME AS t=NAME -> ^(DEFVAR $n $t);

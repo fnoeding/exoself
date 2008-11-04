@@ -104,6 +104,8 @@ class ModuleTranslator(object):
 		self._dispatchTable['assert'] = self._onAssert
 		self._dispatchTable['if'] = self._onIf
 		self._dispatchTable['for'] = self._onFor
+		self._dispatchTable['break'] = self._onBreak
+		self._dispatchTable['continue'] = self._onContinue
 		self._dispatchTable['INTEGER_CONSTANT'] = self._onIntegerConstant
 		self._dispatchTable['FLOAT_CONSTANT'] = self._onFloatConstant
 		self._dispatchTable['CALLFUNC'] = self._onCallFunc
@@ -147,7 +149,9 @@ class ModuleTranslator(object):
 		assert(tree.getText() == 'MODULE')
 
 		self._module = Module.new('main_module')
-		self._scopeStack = _ScopeStack()
+		self._scopeStack = _ScopeStack() # used to resolve variables
+		self._breakTargets = [] # every loop pushes / pops basic blocks onto this stack for usage by break.
+		self._continueTargets = [] # see breakTargets
 
 		# add some helper functions / prototypes / ... to the module
 		self._addHelperFunctions()
@@ -426,6 +430,7 @@ class ModuleTranslator(object):
 			headDownBB = self._currentFunction.append_basic_block('headDown')
 			headUpBB = self._currentFunction.append_basic_block('headUp')
 			bodyBB = self._currentFunction.append_basic_block('body')
+			stepBB = self._currentFunction.append_basic_block('step')
 			# TODO: think about implementing an 'else' block, that gets called when the loop does not get executed
 			mergeBB = self._currentFunction.append_basic_block('merge')
 
@@ -448,12 +453,22 @@ class ModuleTranslator(object):
 
 			# build loop body
 			self._currentBuilder = Builder.new(bodyBB)
-			self._dispatch(loopBody)
+			self._breakTargets.append(mergeBB)
+			self._continueTargets.append(stepBB)
+			try:
+				self._dispatch(loopBody)
+			finally:
+				self._breakTargets.pop()
+				self._continueTargets.pop()
+
+			# end loop body with branch to stepBB
+			self._currentBuilder.branch(stepBB)
 
 			# now increment inductVar and branch back to head for another round
-			r = self._currentBuilder.add(self._currentBuilder.load(inductVar), step)
-			self._currentBuilder.store(r, inductVar)
-			self._currentBuilder.branch(headBB)
+			b = Builder.new(stepBB)
+			r = b.add(b.load(inductVar), step)
+			b.store(r, inductVar)
+			b.branch(headBB)
 
 			# done! continue outside loop body
 			self._currentBuilder = Builder.new(mergeBB)
@@ -461,7 +476,21 @@ class ModuleTranslator(object):
 
 
 
+	def _onBreak(self, tree):
+		assert(tree.getText() == 'break')
 
+		assert(self._breakTargets and 'not inside a loop or other break\'abl construct')
+
+		self._currentBuilder.branch(self._breakTargets[-1])
+
+
+	def _onContinue(self, tree):
+		assert(tree.getText() == 'continue')
+
+		assert(self._continueTargets and 'not inside a loop')
+
+		self._currentBuilder.branch(self._continueTargets[-1])
+		
 
 	def _onPass(self, tree):
 		assert(tree.getText() == 'pass')
