@@ -140,7 +140,7 @@ class ModuleTranslator(object):
 		self._dispatchTable['='] = self._onAssign
 		self._dispatchTable['LISTASSIGN'] = self._onListAssign
 
-	def _generateContext(self, preText, postText, inlineText='', lineBase1=0, charBase1=0, numBefore=5, numAfter=1):
+	def _generateContext(self, preText, postText, inlineText='', lineBase1=0, charBase1=0, numBefore=5, numAfter=0):
 		if not self._sourcecodeLines or not lineBase1:
 			s = []
 			if preText:
@@ -148,7 +148,8 @@ class ModuleTranslator(object):
 			if inlineText:
 				s.append(inlineText)
 			s.append(postText)
-			return '; '.join(s) + '\n'
+			print s
+			return '\n\t'.join(s) + '\n'
 
 
 		s = []
@@ -156,7 +157,7 @@ class ModuleTranslator(object):
 			s.append(preText)
 
 		start = max(lineBase1 - 1 - 5, 0)
-		stop = min(lineBase1 - 1 + 1, len(self._sourcecodeLines))
+		stop = min(lineBase1 - 1 + 1 + numAfter, len(self._sourcecodeLines))
 		for i in range(start, stop):
 			s.append('% 5d: %s' % (i + 1, self._sourcecodeLines[i]))
 			if i == stop - 1:
@@ -342,7 +343,9 @@ class ModuleTranslator(object):
 				currentBB = self._currentBuilder.block
 				if not (currentBB.instructions and currentBB.instructions[-1].is_terminator):
 					# FIXME assert with a good description would be way better...
-					print 'control flow possibly reaches end of non-void function. Inserting trap instruction...'
+					lastChild = tree.getChild(tree.getChildCount() - 1)
+					s = self._generateContext(preText='warning:', postText='control flow possibly reaches end of non-void function. Inserting trap instruction...', lineBase1=lastChild.line, numAfter=3)
+					print s
 					trapFunc = Function.intrinsic(self._module, INTR_TRAP, []);
 					self._currentBuilder.call(trapFunc, [])
 					self._currentBuilder.ret(Constant.int(Type.int(32), -1)) # and return, otherwise func.verify will fail
