@@ -278,9 +278,8 @@ class ModuleTranslator(object):
 
 		# was there already a function with this name?
 		# if everything matches, just ignore - otherwise fail
-		if name in self._functions:
-			ty_old_func = self._functions[name]
-
+		ty_old_func = self._scopeStack.find(name)
+		if ty_old_func:
 			# compare types
 			if not (ty_old_func.type == Type.pointer(ty_funcProto)): # != does not work somehow...
 				s = 'expected type: %s' % ty_old_func.type.pointee
@@ -294,7 +293,8 @@ class ModuleTranslator(object):
 			for i,x in enumerate(functionParamNames):
 				ty_func.args[i].name = x
 
-			self._functions[name] = ty_func # FIXME refactor: this dict is also provided by module
+			# add function name to scope
+			self._scopeStack.add(name, ty_func)
 
 
 	def _onDefFunction(self, tree):
@@ -306,7 +306,7 @@ class ModuleTranslator(object):
 		argList = ci.next()
 
 		self._onDefProtoype(tree)
-		ty_func = self._functions[name]
+		ty_func = self._scopeStack.find(name)
 		ty_func.name = name
 
 		# differentiate between declarations and definitions
@@ -317,12 +317,10 @@ class ModuleTranslator(object):
 		with _ScopeStackWithProxy(self._scopeStack):
 
 			self._currentFunction = ty_func
-			self._functions[name] = ty_func
 			entryBB = ty_func.append_basic_block('entry')
 
 			# add variables
 			for i in range(len(ty_func.args)):
-				#self._scopeStack.add(ty_func.args[i].name, ty_func.args[i])
 				self._createAllocaForVar(ty_func.args[i].name, ty_func.args[i].type, ty_func.args[i], treeForErrorReporting=tree)
 
 
@@ -783,6 +781,12 @@ class ModuleTranslator(object):
 		ref = self._scopeStack.find(name)
 		if ref:
 			# variable already exists
+
+			# check type
+			if not (value.type == ref.type.pointee):
+				s1 = 'expression is of incompatible type'
+				s2 = 'lhs type: %s; rhs type: %s' % (ref.type.pointee, value.type)
+				self._raiseException(RecoverableCompileError, tree=treeForErrorReporting, inlineText=s1, postText=s2)
 			self._currentBuilder.store(value, ref)
 		else:
 			# new variable
@@ -813,8 +817,8 @@ class ModuleTranslator(object):
 		# this form avoids any problems related to already existing variables with different types
 
 		lastResult = value;
-		for name in names:
-			ref = self._simpleAssignment(name, lastResult)
+		for i, name in enumerate(names):
+			ref = self._simpleAssignment(name, lastResult, treeForErrorReporting=tree.getChild(i + 1))
 
 			if ref.type != lastResult.type:# when we get different types this gets finally called and must do some conversions
 				lastResult = self._currentBuilder.load(ref)
@@ -871,14 +875,13 @@ class ModuleTranslator(object):
 		self._sourcecodeLines = sourcecode.splitlines()
 
 		self._module = None
-		self._functions = {}
-		
+
 
 		self._dispatch(tree)
 
 		self._module.verify()
 
-		return self._module, self._functions
+		return self._module
 
 
 def run(module, function):

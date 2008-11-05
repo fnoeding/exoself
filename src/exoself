@@ -126,7 +126,7 @@ def main():
 	# build llvm IR
 	mt = ast2llvm.ModuleTranslator()
 	try:
-		module, functions = mt.translateAST(ast, fn, source)
+		module = mt.translateAST(ast, fn, source)
 	except ast2llvm.CompileError, e:
 		print e.message.rstrip()
 		return 1
