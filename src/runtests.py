@@ -38,10 +38,15 @@ options = None
 args = None
 
 
-def runExoself(filebase, opts):
-	exitStatus = os.system('../src/exoself --save-temps %s %s.es' % (opts, filebase))
+def runExoself(filebase, opts, quiet=False):
+	postFix = ''
+	if quiet:
+		postFix = ' 1> /dev/null 2> /dev/null'
+
+	exitStatus = os.system('../src/exoself --save-temps %s %s.es %s' % (opts, filebase, postFix))
 	if os.WEXITSTATUS(exitStatus) != 0:
-		print 'compilation failed'
+		if not quiet:
+			print 'compilation failed'
 		return False
 
 	return True
@@ -50,6 +55,11 @@ def runExoself(filebase, opts):
 
 def runTest(filebase):
 	path, filename = os.path.split(filebase)
+
+	# special case: compilation MUST fail
+	if os.path.exists('%s.compileerror' % filebase):
+		r = runExoself(filebase, '-c', True)
+		return not r
 
 	if not runExoself(filebase, '-A'): # only ast
 		return False

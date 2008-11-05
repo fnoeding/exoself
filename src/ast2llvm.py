@@ -91,6 +91,15 @@ class _ScopeStack(object):
 		return None
 
 
+class CompileError(Exception):
+	pass
+
+class RecoverableCompileError(CompileError):
+	# just continue with next suitable AST node, for example continue with next function
+	# if this error is raised compilation MUST still fail! It only allows to give the user
+	# more information about further errors in the source code
+	pass
+
 
 
 class ModuleTranslator(object):
@@ -131,6 +140,47 @@ class ModuleTranslator(object):
 		self._dispatchTable['='] = self._onAssign
 		self._dispatchTable['LISTASSIGN'] = self._onListAssign
 
+	def _generateContext(self, preText, postText, inlineText='', lineBase1=0, charBase1=0, numBefore=5, numAfter=1):
+		if not self._sourcecodeLines or not lineBase1:
+			s = []
+			if preText:
+				s.append(preText)
+			if inlineText:
+				s.append(inlineText)
+			s.append(postText)
+			return '; '.join(s) + '\n'
+
+
+		s = []
+		if preText:
+			s.append(preText)
+
+		start = max(lineBase1 - 1 - 5, 0)
+		stop = min(lineBase1 - 1 + 1, len(self._sourcecodeLines))
+		for i in range(start, stop):
+			s.append('% 5d: %s' % (i + 1, self._sourcecodeLines[i]))
+			if i == stop - 1:
+				x = (' ' * (7 + charBase1))
+				x += '^--- %s' % inlineText
+				s.append(x)
+		if postText:
+			s.append(postText)
+
+
+		return '\n'.join(s) + '\n'
+
+	def _raiseException(self, exType, line=None, tree=None, numContextLines=5, preText='error:', postText='', inlineText=''):
+		if line:
+			s = self._generateContext(lineBase1=line, preText=preText, postText=postText, inlineText=inlineText)
+		elif tree and tree.line:
+			s = self._generateContext(lineBase1=tree.line, charBase1=tree.charPositionInLine, preText=preText, postText=postText, inlineText=inlineText)
+		else:
+			s = self._generateContext(preText=preText, postText=postText, inlineText=inlineText)
+
+		raise exType(s)
+		
+
+
 	def _addHelperFunctions(self):
 		# puts
 		retType= Type.int(32)
@@ -148,6 +198,9 @@ class ModuleTranslator(object):
 	def _onModule(self, tree):
 		assert(tree.getText() == 'MODULE')
 
+		self._errors = 0
+		self._warnings = 0
+
 		self._module = Module.new('main_module')
 		self._scopeStack = _ScopeStack() # used to resolve variables
 		self._breakTargets = [] # every loop pushes / pops basic blocks onto this stack for usage by break.
@@ -158,13 +211,34 @@ class ModuleTranslator(object):
 
 		# first pass: make all functions available, so we don't need any stupid forward declarations
 		for x in _childrenIterator(tree):
-			if x.getText() == 'DEFFUNC':
-				self._onDefProtoype(x)
+			try:
+				if x.getText() == 'DEFFUNC':
+					self._onDefProtoype(x)
+			except RecoverableCompileError, e:
+				print e.message.rstrip()
+				self._errors += 1
+			except CompileError, e:
+				print e.message.rstrip()
+				self._errors += 1
+				break
+
+		if self._errors:
+			raise CompileError('errors occured during checking global statements: aborting')
 
 
 		# second pass: translate code
 		for x in _childrenIterator(tree):
-			self._dispatch(x)
+			try:
+				self._dispatch(x)
+			except RecoverableCompileError, e:
+				print e.message.rstrip()
+				self._errors += 1
+			except CompileError, e:
+				print e.message.rstrip()
+				self._errors += 1
+				break
+		if self._errors:
+			raise CompileError('errors occured during compilation: aborting')
 
 
 	def _onDefProtoype(self, tree):
@@ -182,7 +256,7 @@ class ModuleTranslator(object):
 		elif returnType == 'void':
 			ty_ret = Type.void()
 		else:
-			raise NotImplementedError('unsupported type: %s' % returnType)
+			self._raiseException(RecoverableCompileError, tree=tree.getChild(1), inlineText='unknown type')
 
 
 		functionParam_ty = []
@@ -208,7 +282,9 @@ class ModuleTranslator(object):
 			ty_old_func = self._functions[name]
 
 			# compare types
-			assert(ty_old_func.type == Type.pointer(ty_funcProto))
+			if not (ty_old_func.type == Type.pointer(ty_funcProto)): # != does not work somehow...
+				s = 'expected type: %s' % ty_old_func.type.pointee
+				self._raiseException(RecoverableCompileError, tree=tree, inlineText='prototype does not match earlier declaration / definition', postText=s)
 
 			# TODO compare more?
 			# maybe add argument names if they were omitted previously?
@@ -247,7 +323,7 @@ class ModuleTranslator(object):
 			# add variables
 			for i in range(len(ty_func.args)):
 				#self._scopeStack.add(ty_func.args[i].name, ty_func.args[i])
-				self._createAllocaForVar(ty_func.args[i].name, ty_func.args[i].type, ty_func.args[i])
+				self._createAllocaForVar(ty_func.args[i].name, ty_func.args[i].type, ty_func.args[i], treeForErrorReporting=tree)
 
 
 			addedBRToEntryBB = False
@@ -291,6 +367,12 @@ class ModuleTranslator(object):
 		assert(tree.getText() == 'return')
 
 		value = self._dispatch(tree.getChild(0))
+
+		expectedRetType = self._currentFunction.type.pointee.return_type
+		if not (value.type == expectedRetType): # FIXME bug in llvm-py: != does not work
+			s = 'expected return type: %s' % expectedRetType
+			self._raiseException(RecoverableCompileError, tree=tree.getChild(0), inlineText='wrong return type', postText=s)
+
 		self._currentBuilder.ret(value)
 
 	def _onAssert(self, tree):
@@ -479,15 +561,16 @@ class ModuleTranslator(object):
 	def _onBreak(self, tree):
 		assert(tree.getText() == 'break')
 
-		assert(self._breakTargets and 'not inside a loop or other break\'abl construct')
-
+		if not self._breakTargets:
+			self._raiseException(RecoverableCompileError, tree=tree, inlineText='break is only possible inside loop or switch statements')
 		self._currentBuilder.branch(self._breakTargets[-1])
 
 
 	def _onContinue(self, tree):
 		assert(tree.getText() == 'continue')
 
-		assert(self._continueTargets and 'not inside a loop')
+		if not self._continueTargets:
+			self._raiseException(RecoverableCompileError, tree=tree, inlineText='continue is only possible inside loop statements')
 
 		self._currentBuilder.branch(self._continueTargets[-1])
 		
@@ -533,14 +616,13 @@ class ModuleTranslator(object):
 
 		varName = tree.getChild(0).getText()
 		ref = self._scopeStack.find(varName)
-		assert(ref and 'variable was not defined: %s' % varName)
-
-		#return ref
+		if not ref:
+			self._raiseException(RecoverableCompileError, tree=tree.getChild(0), inlineText='undefined variable name')
 
 		return self._currentBuilder.load(ref)
 
 
-	def _createAllocaForVar(self, name, type, value=None):
+	def _createAllocaForVar(self, name, type, value=None, treeForErrorReporting=None):
 		assert(not isinstance(type, str))
 
 		if type == Type.int(32):
@@ -552,7 +634,8 @@ class ModuleTranslator(object):
 			value = defaultValue
 
 		# check if this variable is already defined
-		assert(not self._scopeStack.find(name) and 'variable already defined: %s' % name)
+		if self._scopeStack.find(name):
+			self._raiseException(RecoverableCompileError, tree=treeForErrorReporting, inlineText='variable already defined: %s' % name)
 
 		# use the usual LLVM pattern to create mutable variables: use alloca
 		# important: the mem2reg pass is limited to analyzing the entry block of functions,
@@ -580,9 +663,9 @@ class ModuleTranslator(object):
 		if varType == 'int32':
 			varType = Type.int(32)
 		else:
-			assert(0 and 'unsuported variable type')
+			self._raiseException(RecoverableCompileError, tree=tree.getChild(1), inlineText='unknown type')
 
-		self._createAllocaForVar(varName, varType)
+		self._createAllocaForVar(varName, varType, treeForErrorReporting=tree.getChild(0))
 
 
 	def _onCallFunc(self, tree):
@@ -680,7 +763,7 @@ class ModuleTranslator(object):
 		else:
 			raise NotImplementedError('basic operator \'%s\' not yet implemented' % nodeType)
 
-	def _simpleAssignment(self, name, value):
+	def _simpleAssignment(self, name, value, treeForErrorReporting=None):
 		ref = self._scopeStack.find(name)
 		if ref:
 			# variable already exists
@@ -688,7 +771,7 @@ class ModuleTranslator(object):
 		else:
 			# new variable
 			# do not pass value when creating the variable! The value is NOT available in the entry block (at least in general)!
-			self._createAllocaForVar(name, value.type)
+			self._createAllocaForVar(name, value.type, treeForErrorReporting=treeForErrorReporting)
 
 			ref = self._scopeStack.find(name)
 			self._currentBuilder.store(value, ref)
