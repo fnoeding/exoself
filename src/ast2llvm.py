@@ -673,14 +673,30 @@ class ModuleTranslator(object):
 
 		ci = _childrenIterator(tree)
 		callee = ci.next().getText()
-		assert(callee in self._functions and 'function not found')
+
+		try:
+			function = self._module.get_function_named(callee)
+		except LLVMException:
+			self._raiseException(RecoverableCompileError, tree=tree.getChild(0), inlineText='undefined function')
+
 
 		params = []
 		for x in ci:
 			r = self._dispatch(x)
 			params.append(r)
 
-		return self._currentBuilder.call(self._functions[callee], params, 'ret_%s' % callee)
+		# check arguments
+		if len(params) != len(function.args):
+			s = 'function type: %s' % function.type.pointee
+			self._raiseException(RecoverableCompileError, tree=tree.getChild(0), inlineText='wrong number of arguments', postText=s)
+
+		for i in range(len(function.args)):
+			if not (function.args[i].type == params[i].type):
+				s = 'argument %d type: %s' % (i + 1, function.args[i].type)
+				s2 = 'wrong argument type: %s' % params[i].type
+				self._raiseException(RecoverableCompileError, tree=tree.getChild(i + 1), inlineText=s2, postText=s)
+
+		return self._currentBuilder.call(function, params, 'ret_%s' % callee)
 
 	def _onBasicOperator(self, tree):
 		nodeType = tree.getText()
