@@ -281,7 +281,7 @@ class ModuleTranslator(object):
 		ty_old_func = self._scopeStack.find(name)
 		if ty_old_func:
 			# compare types
-			if not (ty_old_func.type == Type.pointer(ty_funcProto)): # != does not work somehow...
+			if ty_old_func.type.pointee != ty_funcProto:
 				s = 'expected type: %s' % ty_old_func.type.pointee
 				self._raiseException(RecoverableCompileError, tree=tree, inlineText='prototype does not match earlier declaration / definition', postText=s)
 
@@ -367,7 +367,7 @@ class ModuleTranslator(object):
 		value = self._dispatch(tree.getChild(0))
 
 		expectedRetType = self._currentFunction.type.pointee.return_type
-		if not (value.type == expectedRetType): # FIXME bug in llvm-py: != does not work
+		if value.type != expectedRetType:
 			s = 'expected return type: %s' % expectedRetType
 			self._raiseException(RecoverableCompileError, tree=tree.getChild(0), inlineText='wrong return type', postText=s)
 
@@ -689,7 +689,7 @@ class ModuleTranslator(object):
 			self._raiseException(RecoverableCompileError, tree=tree.getChild(0), inlineText='wrong number of arguments', postText=s)
 
 		for i in range(len(function.args)):
-			if not (function.args[i].type == params[i].type):
+			if function.args[i].type != params[i].type:
 				s = 'argument %d type: %s' % (i + 1, function.args[i].type)
 				s2 = 'wrong argument type: %s' % params[i].type
 				self._raiseException(RecoverableCompileError, tree=tree.getChild(i + 1), inlineText=s2, postText=s)
@@ -783,7 +783,7 @@ class ModuleTranslator(object):
 			# variable already exists
 
 			# check type
-			if not (value.type == ref.type.pointee):
+			if value.type != ref.type.pointee:
 				s1 = 'expression is of incompatible type'
 				s2 = 'lhs type: %s; rhs type: %s' % (ref.type.pointee, value.type)
 				self._raiseException(RecoverableCompileError, tree=treeForErrorReporting, inlineText=s1, postText=s2)
