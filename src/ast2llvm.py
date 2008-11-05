@@ -252,9 +252,9 @@ class ModuleTranslator(object):
 		argList = ci.next()
 
 		if returnType == 'int32':
-			ty_ret = Type.int(32)
+			returnType = Type.int(32)
 		elif returnType == 'void':
-			ty_ret = Type.void()
+			returnType = Type.void()
 		else:
 			self._raiseException(RecoverableCompileError, tree=tree.getChild(1), inlineText='unknown type')
 
@@ -274,27 +274,27 @@ class ModuleTranslator(object):
 			functionParamNames.append(argName)
 
 
-		ty_funcProto = Type.function(ty_ret, functionParam_ty)
+		funcProto = Type.function(returnType, functionParam_ty)
 
 		# was there already a function with this name?
 		# if everything matches, just ignore - otherwise fail
-		ty_old_func = self._scopeStack.find(name)
-		if ty_old_func:
+		oldFunc = self._scopeStack.find(name)
+		if oldFunc:
 			# compare types
-			if ty_old_func.type.pointee != ty_funcProto:
-				s = 'expected type: %s' % ty_old_func.type.pointee
+			if oldFunc.type.pointee != funcProto:
+				s = 'expected type: %s' % oldFunc.type.pointee
 				self._raiseException(RecoverableCompileError, tree=tree, inlineText='prototype does not match earlier declaration / definition', postText=s)
 
 			# TODO compare more?
 			# maybe add argument names if they were omitted previously?
 		else:
-			ty_func = self._module.add_function(ty_funcProto, name)
+			func = self._module.add_function(funcProto, name)
 
 			for i,x in enumerate(functionParamNames):
-				ty_func.args[i].name = x
+				func.args[i].name = x
 
 			# add function name to scope
-			self._scopeStack.add(name, ty_func)
+			self._scopeStack.add(name, func)
 
 
 	def _onDefFunction(self, tree):
@@ -306,8 +306,8 @@ class ModuleTranslator(object):
 		argList = ci.next()
 
 		self._onDefProtoype(tree)
-		ty_func = self._scopeStack.find(name)
-		ty_func.name = name
+		func = self._scopeStack.find(name)
+		func.name = name
 
 		# differentiate between declarations and definitions
 		if tree.getChildCount() == 3:
@@ -316,17 +316,17 @@ class ModuleTranslator(object):
 
 		with _ScopeStackWithProxy(self._scopeStack):
 
-			self._currentFunction = ty_func
-			entryBB = ty_func.append_basic_block('entry')
+			self._currentFunction = func
+			entryBB = func.append_basic_block('entry')
 
 			# add variables
-			for i in range(len(ty_func.args)):
-				self._createAllocaForVar(ty_func.args[i].name, ty_func.args[i].type, ty_func.args[i], treeForErrorReporting=tree)
+			for i in range(len(func.args)):
+				self._createAllocaForVar(func.args[i].name, func.args[i].type, func.args[i], treeForErrorReporting=tree)
 
 
 			addedBRToEntryBB = False
 			for x in ci:
-				currentBB = ty_func.append_basic_block('bb')
+				currentBB = func.append_basic_block('bb')
 				self._currentBuilder = Builder.new(currentBB)
 
 				if not addedBRToEntryBB:
@@ -345,11 +345,11 @@ class ModuleTranslator(object):
 					print 'control flow possibly reaches end of non-void function. Inserting trap instruction...'
 					trapFunc = Function.intrinsic(self._module, INTR_TRAP, []);
 					self._currentBuilder.call(trapFunc, [])
-					self._currentBuilder.ret(Constant.int(Type.int(32), -1)) # and return, otherwise ty_func.verify will fail
+					self._currentBuilder.ret(Constant.int(Type.int(32), -1)) # and return, otherwise func.verify will fail
 					
 				
 
-			ty_func.verify()
+			func.verify()
 
 
 	def _onBlock(self, tree):
@@ -592,9 +592,9 @@ class ModuleTranslator(object):
 			i = int(value)
 		
 
-		ty_int = Type.int(32)
+		constType = Type.int(32)
 
-		return Constant.int(ty_int, i)
+		return Constant.int(constType, i)
 
 
 	def _onFloatConstant(self, tree):
@@ -604,9 +604,9 @@ class ModuleTranslator(object):
 		
 		f = float(value)
 
-		ty_float = Type.float()
+		constType = Type.float()
 
-		return Constant.real(ty_float, f) # FIXME use float
+		return Constant.real(constType, f) # FIXME use float
 
 
 	def _onVariable(self, tree):
@@ -766,8 +766,8 @@ class ModuleTranslator(object):
 			if nodeType == '+':
 				return v1
 			elif nodeType == '-':
-				ty_int = Type.int(32)
-				return self._currentBuilder.sub(Constant.int(ty_int, 0), v1)
+				type_ = Type.int(32)
+				return self._currentBuilder.sub(Constant.int(type_, 0), v1)
 			elif nodeType == 'not':
 				r = self._currentBuilder.icmp(IPRED_EQ, v1, Constant.int(v1.type, 0))
 
