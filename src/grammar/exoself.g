@@ -44,6 +44,7 @@ tokens {
 	MODULE;
 	DEFFUNC;
 	DEFFUNCARGS;
+	DEFFUNCMODIFIERS;
 	DEFVAR;
 	BLOCK;
 	SIMPLE_STATEMENT;
@@ -180,8 +181,14 @@ continue_stmt: CONTINUE^;
 
 defvar: n=NAME AS t=NAME -> ^(DEFVAR $n $t);
 
-deffunc: DEF NAME LPAREN deffuncargs RPAREN AS NAME (block | SEMI) -> ^(DEFFUNC NAME NAME deffuncargs block?);
-deffuncargs: (NAME AS NAME COMMA)* (NAME AS NAME)? -> ^(DEFFUNCARGS NAME*);
+deffunc:
+	DEF deffuncmodifiers
+	NAME
+	deffuncargs AS NAME
+	(block | SEMI)
+	-> ^(DEFFUNC deffuncmodifiers NAME NAME deffuncargs block?);
+deffuncargs: LPAREN (NAME AS NAME COMMA)* (NAME AS NAME)? RPAREN-> ^(DEFFUNCARGS NAME*);
+deffuncmodifiers: (LPAREN NAME ASSIGN NAME (COMMA NAME ASSIGN NAME)* RPAREN)? -> ^(DEFFUNCMODIFIERS NAME*);
 
 block: LCURLY
 			block_content*

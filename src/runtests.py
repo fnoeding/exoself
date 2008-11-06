@@ -129,29 +129,65 @@ def main():
 
 		e = '../tests/' + e
 		if os.path.isdir(e):
-			print e
+			print e,
 
 			l2 = os.listdir(e)
 			l2.sort()
-			for x in l2:
-				if options.testPrefix and not x.startswith(options.testPrefix):
-					continue
 
-				if not x.endswith('.es'):
-					continue
-				x = '%s/%s' % (e, x)
-				total += 1
+			if not 'Makefile' in l2:
+				print 'no \'Makefile\' found --> manual compilation'
+				for x in l2:
+					if options.testPrefix and not x.startswith(options.testPrefix):
+						continue
 
-				base = x[:-3]
+					if not x.endswith('.es'):
+						continue
+					x = '%s/%s' % (e, x)
+					total += 1
 
-				print 'Running test', base, '...'
-				if not runTest(base):
-					if not options.continueAfterFailure:
-						halt = True
-					failed += 1
+					base = x[:-3]
 
-				if halt:
-					break
+					print 'Running test', base, '...'
+					if not runTest(base):
+						if not options.continueAfterFailure:
+							halt = True
+						failed += 1
+
+					if halt:
+						break
+			else:
+				print '\'Makefile\' found --> using make'
+				oldCWD = os.getcwd()
+				os.chdir(e)
+				for x in l2:
+					if options.testPrefix and not x.startswith(options.testPrefix):
+						continue
+
+					if not x.endswith('.app'):
+						continue
+					print 'running test %s/%s' % (e, x)
+					total += 1
+
+					testNum = x[:-4] # do NOT convert to int
+					
+
+					exitStatus = os.system('make testnum=%s clean' % testNum)
+					if os.WEXITSTATUS(exitStatus) != 0:
+						print 'cleaning failed'
+						failed += 1
+						continue
+					exitStatus = os.system('make testnum=%s' % testNum)
+					if os.WEXITSTATUS(exitStatus) != 0:
+						print 'compilation and / or run failed'
+						failed += 1
+					os.system('make testnum=%s clean' % testNum)
+
+				os.chdir(oldCWD)
+
+
+
+
+
 
 			print '\n'
 		else:

@@ -249,6 +249,7 @@ class ModuleTranslator(object):
 
 
 		ci = _childrenIterator(tree)
+		modifiers = ci.next().text
 		name = ci.next().text
 		returnType = ci.next().text
 		argList = ci.next()
@@ -303,6 +304,7 @@ class ModuleTranslator(object):
 		assert(tree.text == 'DEFFUNC')
 
 		ci = _childrenIterator(tree)
+		modifiers = ci.next().text
 		name = ci.next().text
 		returnType = ci.next().text
 		argList = ci.next()
@@ -312,9 +314,10 @@ class ModuleTranslator(object):
 		func.name = name
 
 		# differentiate between declarations and definitions
-		if tree.getChildCount() == 3:
+		if tree.getChildCount() == 4:
 			# declaration
 			return
+		assert(tree.getChild(4).text == 'BLOCK')
 
 		with _ScopeStackWithProxy(self._scopeStack):
 

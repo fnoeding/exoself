@@ -76,7 +76,7 @@ def AST2StringAST(ast):
 
 	r = ['']
 	def walk(t, lvl):
-		r.append((' ' * lvl) + repr(t.getText()))
+		r.append((' ' * lvl) + repr(t.text))
 
 		n = t.getChildCount()
 		for x in range(n):
@@ -98,7 +98,7 @@ def AST2DOT(ast):
 	r = ['graph G\n{']
 	def walk(t, idGen):
 		selfI = idGen.next()
-		r.append('n%d [label="%s"];' % (selfI, t.getText()))
+		r.append('n%d [label="%s"];' % (selfI, t.text))
 
 		n = t.getChildCount()
 		for x in range(n):
