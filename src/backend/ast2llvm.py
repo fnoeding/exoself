@@ -175,7 +175,7 @@ class ModuleTranslator(object):
 		if line:
 			s = self._generateContext(lineBase1=line, preText=preText, postText=postText, inlineText=inlineText)
 		elif tree and tree.line:
-			s = self._generateContext(lineBase1=tree.line, charBase1=tree.charPositionInLine, preText=preText, postText=postText, inlineText=inlineText)
+			s = self._generateContext(lineBase1=tree.line, charBase1=tree.charPos, preText=preText, postText=postText, inlineText=inlineText)
 		else:
 			s = self._generateContext(preText=preText, postText=postText, inlineText=inlineText)
 

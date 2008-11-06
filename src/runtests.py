@@ -89,7 +89,7 @@ def runTest(filebase):
 		expectedRetval = 0
 
 
-	exitStatus = os.system('%s ../tests_tmp/%s.bc' % (options.lli, filename))
+	exitStatus = os.system('%s ../tests_tmp/%s.bc > /dev/null 2> /dev/null' % (options.lli, filename))
 	retVal = os.WEXITSTATUS(exitStatus)
 	if retVal != expectedRetval:
 		print 'received ret: %d\nexpected ret: %s' % (retVal, expectedRetval)

@@ -38,7 +38,7 @@ from optparse import OptionParser, OptionGroup
 
 
 import frontend
-import ast2llvm
+import backend
 
 import llvm
 import llvm.core
@@ -136,10 +136,10 @@ def main():
 		return 0
 
 	# build llvm IR
-	mt = ast2llvm.ModuleTranslator()
+	mt = backend.ModuleTranslator()
 	try:
 		module = mt.translateAST(ast, fn, source)
-	except ast2llvm.CompileError, e:
+	except backend.CompileError, e:
 		print e.message.rstrip()
 		return 1
 
