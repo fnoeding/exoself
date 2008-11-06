@@ -113,6 +113,7 @@ class ModuleTranslator(object):
 		self._dispatchTable['assert'] = self._onAssert
 		self._dispatchTable['if'] = self._onIf
 		self._dispatchTable['for'] = self._onFor
+		self._dispatchTable['while'] = self._onWhile
 		self._dispatchTable['break'] = self._onBreak
 		self._dispatchTable['continue'] = self._onContinue
 		self._dispatchTable['INTEGER_CONSTANT'] = self._onIntegerConstant
@@ -557,6 +558,42 @@ class ModuleTranslator(object):
 			self._currentBuilder = Builder.new(mergeBB)
 
 
+	def _onWhile(self, tree):
+		assert(tree.getText() == 'while')
+
+
+		with _ScopeStackWithProxy(self._scopeStack):
+			# create blocks
+			headBB = self._currentFunction.append_basic_block('head')
+			bodyBB = self._currentFunction.append_basic_block('body')
+			# TODO think about an else block which gets executed iff the body is not executed at least once
+			mergeBB = self._currentFunction.append_basic_block('merge')
+
+			# branch to headBB / enter loop
+			self._currentBuilder.branch(headBB)
+
+			# create test
+			self._currentBuilder = Builder.new(headBB)
+			loopExpr = self._dispatch(tree.getChild(0))
+			if loopExpr.type != Type.int(1):
+				loopExpr = self._currentBuilder.icmp(IPRED_NE, loopExpr, 0)
+
+			self._currentBuilder.cbranch(loopExpr, bodyBB, mergeBB)
+
+			# build body
+			self._currentBuilder = Builder.new(bodyBB)
+			self._breakTargets.append(mergeBB)
+			self._continueTargets.append(headBB)
+			try:
+				self._dispatch(tree.getChild(1))
+			finally:
+				self._breakTargets.pop()
+				self._continueTargets.pop()
+
+			self._currentBuilder.branch(headBB)
+
+			# continue with mergeBB
+			self._currentBuilder = Builder.new(mergeBB)
 
 
 	def _onBreak(self, tree):

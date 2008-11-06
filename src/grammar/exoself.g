@@ -70,6 +70,7 @@ FOR: 'for';
 IN: 'in';
 BREAK: 'break';
 CONTINUE: 'continue';
+WHILE: 'while';
 OR: 'or';
 XOR: 'xor';
 AND: 'and';
@@ -141,12 +142,14 @@ start_module: global_stmt* EOF-> ^(MODULE global_stmt*);
 
 global_stmt: deffunc;
 
-compound_stmt: simple_stmt | if_stmt | for_stmt;
+compound_stmt: simple_stmt | if_stmt | for_stmt | while_stmt;
 
 if_stmt: IF^ expr block (ELSE! IF! expr block)* (ELSE! block)?;
 
 for_stmt: FOR^ NAME IN! for_expression block;
 for_expression: 'range'^ LPAREN! expr (COMMA! expr (COMMA! expr)?)? RPAREN!;
+
+while_stmt: WHILE^ expr block;
 
 
 simple_stmt: (pass_stmt | return_stmt | expr | defvar | assign_stmt | assert_stmt | break_stmt | continue_stmt) (SEMI!+);
