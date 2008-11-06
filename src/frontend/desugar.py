@@ -26,57 +26,56 @@
 # ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-# 
+#
 
 
 
-class Tree(object):
-	''' internal tree type used for AST storage instead of the antlr tree type '''
-	def __init__(self, text, line=0, charPos=0):
-		self.text = text
-		self.children = []
-		self.line = line
-		self.charPos = 0
 
 
-	def copy(self, copyChildren):
-		t = Tree(self.text, self.line, self.charPos)
+def _desugarLoopElse(tree):
+	if not (tree.text == 'while' and len(tree.children) == 3):
+		return
 
-		if copyChildren:
-			for x in self.children:
-				t.children.append(x.copy(copyChildren))
+	# transform a (WHILE (expr blockBody blockElse)) to (IF (expr (BLOCK (WHILE (expr blockBody)) blockElse)))
 
-		return t
+	# remove entries from top node
+	tExprIf = tree.children[0]
+	tExprWhile = tExprIf.copy(True)
+	tBody = tree.children[1]
+	tElse = tree.children[2]
+	tree.children = []
+
+	# create while node
+	tWhile = tree.copy(False)
+	tWhile.text = 'while'
+	tWhile.addChild(tExprWhile)
+	tWhile.addChild(tBody)
+
+	# create block node
+	tBlock = tree.copy(False)
+	tBlock.text = 'BLOCK'
+	tBlock.addChild(tWhile)
+
+	# create if node in place
+	tree.text = 'if'
+	tree.addChild(tExprIf)
+	tree.addChild(tBlock)
+	tree.addChild(tElse)
 
 
-	def getChildCount(self):
-		return len(self.children)
 
-	
-	def getChild(self, i):
-		return self.children[i]
+_actions = [_desugarLoopElse]
 
-	def addChild(self, t):
-		self.children.append(t)
 
-	def getText(self):# FIXME deprecate!
-		return self.text
+def desugar(tree):
+	for a in _actions:
+		a(tree)
 
-	def toStringTree(self):
-		if not self.children:
-			return self.text
+	for c in tree.children:
+		desugar(c)
 
-		s = ['(', self.text, ' ']
-		n = len(self.children)
-		for i,x in enumerate(self.children):
-			s.append(x.toStringTree())
-			if i != n - 1:
-				s.append(' ')
-		s.append(')')
 
-		return ''.join(s)
-		
-
+	return tree
 
 
 

@@ -34,6 +34,7 @@ import antlr3
 from lexer import Lexer
 from parser import Parser
 from tree import Tree
+from desugar import desugar
 
 
 def antlrTree2Tree(antlrTree):
@@ -62,6 +63,9 @@ def sourcecode2AST(source, type='module'):
 
 	# copy ast to our own tree implementation to make modifying easier
 	astTree = antlrTree2Tree(result.tree)
+
+	# 'desugar' it inplace
+	desugar(astTree)
 
 	return (parser.getNumberOfSyntaxErrors(), astTree)
 
