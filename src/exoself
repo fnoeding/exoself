@@ -37,7 +37,7 @@ import sys
 from optparse import OptionParser, OptionGroup
 
 
-import source2ast
+import frontend
 import ast2llvm
 
 import llvm
@@ -111,13 +111,13 @@ def main():
 	source = file(fn).read()
 
 	# build AST
-	numErrors, ast = source2ast.sourcecode2AST(source)
+	numErrors, ast = frontend.sourcecode2AST(source)
 	if numErrors:
 		print 'aborting, %d errors occured' % numErrors
 		return 1
 	if options.saveTemps or options.astOnly:
 		f = file('%s.ast' % baseFN, 'wt')
-		f.write(source2ast.AST2StringAST(ast))
+		f.write(frontend.AST2StringAST(ast))
 		f.close()
 		
 	if options.astOnly:
