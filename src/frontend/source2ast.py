@@ -33,8 +33,17 @@ import setuppaths
 import antlr3
 from lexer import Lexer
 from parser import Parser
-import ast2llvm
+from tree import Tree
 
+
+def antlrTree2Tree(antlrTree):
+	t = Tree(antlrTree.text, antlrTree.line, antlrTree.charPositionInLine)
+
+	for i in range(antlrTree.getChildCount()):
+		subT = antlrTree2Tree(antlrTree.getChild(i))
+		t.addChild(subT)
+
+	return t
 
 
 def sourcecode2AST(source, type='module'):
@@ -51,7 +60,10 @@ def sourcecode2AST(source, type='module'):
 	if type == 'module':
 		result = parser.start_module()
 
-	return (parser.getNumberOfSyntaxErrors(), result.tree)
+	# copy ast to our own tree implementation to make modifying easier
+	astTree = antlrTree2Tree(result.tree)
+
+	return (parser.getNumberOfSyntaxErrors(), astTree)
 
 
 
