@@ -59,8 +59,6 @@ class Tree(object):
 	def addChild(self, t):
 		self.children.append(t)
 
-	def getText(self):# FIXME deprecate!
-		return self.text
 
 	def toStringTree(self):
 		if not self.children:

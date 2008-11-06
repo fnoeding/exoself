@@ -198,7 +198,7 @@ class ModuleTranslator(object):
 
 
 	def _onModule(self, tree):
-		assert(tree.getText() == 'MODULE')
+		assert(tree.text == 'MODULE')
 
 		self._errors = 0
 		self._warnings = 0
@@ -214,7 +214,7 @@ class ModuleTranslator(object):
 		# first pass: make all functions available, so we don't need any stupid forward declarations
 		for x in _childrenIterator(tree):
 			try:
-				if x.getText() == 'DEFFUNC':
+				if x.text == 'DEFFUNC':
 					self._onDefProtoype(x)
 			except RecoverableCompileError, e:
 				print e.message.rstrip()
@@ -245,12 +245,12 @@ class ModuleTranslator(object):
 
 	def _onDefProtoype(self, tree):
 		# this function also gets called for functions definitions and should then only generate a prototype
-		assert(tree.getText() == 'DEFFUNC')
+		assert(tree.text == 'DEFFUNC')
 
 
 		ci = _childrenIterator(tree)
-		name = ci.next().getText()
-		returnType = ci.next().getText()
+		name = ci.next().text
+		returnType = ci.next().text
 		argList = ci.next()
 
 		if returnType == 'int32':
@@ -264,8 +264,8 @@ class ModuleTranslator(object):
 		functionParam_ty = []
 		functionParamNames = []
 		for i in range(argList.getChildCount() / 2):
-			argName = argList.getChild(i * 2).getText()
-			argTypeName = argList.getChild(i * 2 + 1).getText()
+			argName = argList.getChild(i * 2).text
+			argTypeName = argList.getChild(i * 2 + 1).text
 
 			if argTypeName == 'int32':
 				arg_ty = Type.int(32)
@@ -300,11 +300,11 @@ class ModuleTranslator(object):
 
 
 	def _onDefFunction(self, tree):
-		assert(tree.getText() == 'DEFFUNC')
+		assert(tree.text == 'DEFFUNC')
 
 		ci = _childrenIterator(tree)
-		name = ci.next().getText()
-		returnType = ci.next().getText()
+		name = ci.next().text
+		returnType = ci.next().text
 		argList = ci.next()
 
 		self._onDefProtoype(tree)
@@ -357,7 +357,7 @@ class ModuleTranslator(object):
 
 
 	def _onBlock(self, tree):
-		assert(tree.getText() == 'BLOCK')
+		assert(tree.text == 'BLOCK')
 
 		with _ScopeStackWithProxy(self._scopeStack):
 			for x in _childrenIterator(tree):
@@ -366,7 +366,7 @@ class ModuleTranslator(object):
 
 
 	def _onReturn(self, tree):
-		assert(tree.getText() == 'return')
+		assert(tree.text == 'return')
 
 		value = self._dispatch(tree.getChild(0))
 
@@ -378,7 +378,7 @@ class ModuleTranslator(object):
 		self._currentBuilder.ret(value)
 
 	def _onAssert(self, tree):
-		assert(tree.getText() == 'assert')
+		assert(tree.text == 'assert')
 
 		# TODO add a compiler switch to disable asserts, so they become noop's
 		# TODO add a compiler switch to disable inclusion of context data
@@ -432,7 +432,7 @@ class ModuleTranslator(object):
 		self._currentBuilder = Builder.new(elseBB)
 
 	def _onIf(self, tree):
-		assert(tree.getText() == 'if')
+		assert(tree.text == 'if')
 		# children: expr block (expr block)* block?
 		#           if         else if       else
 		
@@ -478,12 +478,12 @@ class ModuleTranslator(object):
 		
 
 	def _onFor(self, tree):
-		assert(tree.getText() == 'for')
+		assert(tree.text == 'for')
 
-		loopVarName = tree.getChild(0).getText()
+		loopVarName = tree.getChild(0).text
 		loopBody = tree.getChild(2)
 		loopExpression = tree.getChild(1)
-		assert(loopExpression.getText() == 'range')
+		assert(loopExpression.text == 'range')
 		assert(1 <= loopExpression.getChildCount() <= 3)
 		n = loopExpression.getChildCount()
 
@@ -559,7 +559,7 @@ class ModuleTranslator(object):
 
 
 	def _onWhile(self, tree):
-		assert(tree.getText() == 'while')
+		assert(tree.text == 'while')
 
 
 		with _ScopeStackWithProxy(self._scopeStack):
@@ -597,7 +597,7 @@ class ModuleTranslator(object):
 
 
 	def _onBreak(self, tree):
-		assert(tree.getText() == 'break')
+		assert(tree.text == 'break')
 
 		if not self._breakTargets:
 			self._raiseException(RecoverableCompileError, tree=tree, inlineText='break is only possible inside loop or switch statements')
@@ -605,7 +605,7 @@ class ModuleTranslator(object):
 
 
 	def _onContinue(self, tree):
-		assert(tree.getText() == 'continue')
+		assert(tree.text == 'continue')
 
 		if not self._continueTargets:
 			self._raiseException(RecoverableCompileError, tree=tree, inlineText='continue is only possible inside loop statements')
@@ -614,13 +614,13 @@ class ModuleTranslator(object):
 		
 
 	def _onPass(self, tree):
-		assert(tree.getText() == 'pass')
+		assert(tree.text == 'pass')
 		# nothing to do here
 
 	def _onIntegerConstant(self, tree):
-		assert(tree.getText() == 'INTEGER_CONSTANT')
+		assert(tree.text == 'INTEGER_CONSTANT')
 
-		value = tree.getChild(0).getText().replace('_', '').lower()
+		value = tree.getChild(0).text.replace('_', '').lower()
 
 		if value.startswith('0x'):
 			i = int(value[2:], 16)
@@ -638,9 +638,9 @@ class ModuleTranslator(object):
 
 
 	def _onFloatConstant(self, tree):
-		assert(tree.getText() == 'FLOAT_CONSTANT')
+		assert(tree.text == 'FLOAT_CONSTANT')
 
-		value = tree.getChild(0).getText().replace('_', '').lower()
+		value = tree.getChild(0).text.replace('_', '').lower()
 		
 		f = float(value)
 
@@ -650,9 +650,9 @@ class ModuleTranslator(object):
 
 
 	def _onVariable(self, tree):
-		assert(tree.getText() == 'VARIABLE')
+		assert(tree.text == 'VARIABLE')
 
-		varName = tree.getChild(0).getText()
+		varName = tree.getChild(0).text
 		ref = self._scopeStack.find(varName)
 		if not ref:
 			self._raiseException(RecoverableCompileError, tree=tree.getChild(0), inlineText='undefined variable name')
@@ -693,10 +693,10 @@ class ModuleTranslator(object):
 
 
 	def _onDefVariable(self, tree):
-		assert(tree.getText() == 'DEFVAR')
+		assert(tree.text == 'DEFVAR')
 
-		varName = tree.getChild(0).getText()
-		varType = tree.getChild(1).getText()
+		varName = tree.getChild(0).text
+		varType = tree.getChild(1).text
 
 		if varType == 'int32':
 			varType = Type.int(32)
@@ -707,10 +707,10 @@ class ModuleTranslator(object):
 
 
 	def _onCallFunc(self, tree):
-		assert(tree.getText() == 'CALLFUNC')
+		assert(tree.text == 'CALLFUNC')
 
 		ci = _childrenIterator(tree)
-		callee = ci.next().getText()
+		callee = ci.next().text
 
 		try:
 			function = self._module.get_function_named(callee)
@@ -737,7 +737,7 @@ class ModuleTranslator(object):
 		return self._currentBuilder.call(function, params, 'ret_%s' % callee)
 
 	def _onBasicOperator(self, tree):
-		nodeType = tree.getText()
+		nodeType = tree.text
 		if tree.getChildCount() == 2 and nodeType in '''* ** // % / and xor or + - < <= == != >= >'''.split():
 			first = tree.getChild(0)
 			second = tree.getChild(1)
@@ -839,12 +839,12 @@ class ModuleTranslator(object):
 		return ref
 
 	def _onAssign(self, tree):
-		assert(tree.getText() == '=')
+		assert(tree.text == '=')
 
 		n = tree.getChildCount()
 		names = []
 		for i in range(n - 1):
-			names.append(tree.getChild(i).getText())
+			names.append(tree.getChild(i).text)
 
 		value = self._dispatch(tree.getChild(n - 1))
 
@@ -867,12 +867,12 @@ class ModuleTranslator(object):
 		return lastResult # TODO really needed?
 
 	def _onListAssign(self, tree):
-		assert(tree.getText() == 'LISTASSIGN')
+		assert(tree.text == 'LISTASSIGN')
 
 		lhs = tree.getChild(0)
-		assert(lhs.getText() == 'ASSIGNLIST')
+		assert(lhs.text == 'ASSIGNLIST')
 		rhs = tree.getChild(1)
-		assert(rhs.getText() == 'ASSIGNLIST')
+		assert(rhs.text == 'ASSIGNLIST')
 
 		assert(lhs.getChildCount() == rhs.getChildCount() and 'different number of assignees and expressions')
 		n = rhs.getChildCount()
@@ -895,7 +895,7 @@ class ModuleTranslator(object):
 		# this is a simple assignment
 		for i in range(n):
 			value = self._currentBuilder.load(temps[i])
-			destination = lhs.getChild(i).getText()
+			destination = lhs.getChild(i).text
 
 			self._simpleAssignment(destination, value)
 
@@ -903,12 +903,12 @@ class ModuleTranslator(object):
 
 
 	def _dispatch(self, tree):
-		return self._dispatchTable[tree.getText()](tree)
+		return self._dispatchTable[tree.text](tree)
 
 
 
 	def translateAST(self, tree, filename='', sourcecode=''):
-		assert(tree.getText() == 'MODULE')
+		assert(tree.text == 'MODULE')
 
 		self._filename = filename
 		self._sourcecode = sourcecode
