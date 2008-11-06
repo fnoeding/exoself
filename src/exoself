@@ -78,6 +78,8 @@ def main():
 	op.add_option('-S', help='assemble only', dest='asmOnly', action='store_true')
 
 	op.add_option('--save-temps', help='save temporary files in current directory', dest='saveTemps', action='store_true')
+	op.add_option('--ast2dot', help='save AST as a DOT file for graphviz', dest='ast2dot', action='store_true')
+	op.add_option('--ast2png', help='save AST as a png file (needs graphviz / dot)', dest='ast2png', action='store_true')
 
 
 	optUsage = []
@@ -118,6 +120,16 @@ def main():
 	if options.saveTemps or options.astOnly:
 		f = file('%s.ast' % baseFN, 'wt')
 		f.write(frontend.AST2StringAST(ast))
+		f.close()
+
+	if options.ast2dot:
+		f = file('%s.dot' % baseFN, 'wt')
+		f.write(frontend.AST2DOT(ast))
+		f.close()
+
+	if options.ast2png:
+		f = file('%s.png' % baseFN, 'wt')
+		f.write(frontend.AST2PNG(ast))
 		f.close()
 		
 	if options.astOnly:

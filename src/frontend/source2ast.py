@@ -101,7 +101,7 @@ def AST2PNG(ast):
 
 	dot = AST2DOT(ast)
 
-	p = subprocess.Popen('dot -Tpng', stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+	p = subprocess.Popen(['dot', '-Tpng'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
 
 	p.stdin.write(dot)
 	p.stdin.close()
