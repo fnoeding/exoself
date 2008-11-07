@@ -1,6 +1,7 @@
 LLI=lli
 LLVM_LINK=llvm-link
 EXOSELF=../../src/exoself
+EXOSELF_OPTS=--save-temps
 
 
 
@@ -21,9 +22,12 @@ t$(testnum).bc: $(objects)
 $(objects): $(sources)
 
 %.bc: %.es
-	@$(EXOSELF) $<
+	@$(EXOSELF) $(EXOSELF_OPTS) $<
 
 
 clean:
 	@rm -f t$(testnum).bc $(objects) > /dev/null 2> /dev/null
+	@rm -f $(addsuffix .ast, $(files)) > /dev/null 2> /dev/null
+	@rm -f $(addsuffix .preopt.ll, $(files)) > /dev/null 2> /dev/null
+	@rm -f $(addsuffix .ll, $(files)) > /dev/null 2> /dev/null
 

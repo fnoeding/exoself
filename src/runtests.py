@@ -160,6 +160,10 @@ def main():
 				oldCWD = os.getcwd()
 				os.chdir(e)
 				for x in l2:
+					if failed and not options.continueAfterFailure:
+						halt = True
+						break
+
 					if options.testPrefix and not x.startswith(options.testPrefix):
 						continue
 
@@ -180,6 +184,7 @@ def main():
 					if os.WEXITSTATUS(exitStatus) != 0:
 						print 'compilation and / or run failed'
 						failed += 1
+						continue
 					os.system('make testnum=%s clean' % testNum)
 
 				os.chdir(oldCWD)

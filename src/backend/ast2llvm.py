@@ -37,6 +37,8 @@ from llvm.ee import *
 
 import os.path
 
+from mangle import *
+
 def _childrenIterator(tree):
 	n = tree.getChildCount()
 	for i in range(n):
@@ -73,11 +75,22 @@ class _ScopeStack(object):
 		self._stack[self._currentLevel] = {}
 
 
-	def add(self, name, ref, allowOverwriting=False):
-		if not allowOverwriting:
+	def add(self, name, ref):
+		if ref.type.pointee.kind == TYPE_FUNCTION:
+			# there may be several functions using the same name
+			# --> function overloading
+
+			# check that there is no variable shadowing that would shadow this function
+			r = self.find(name)
+			if not r:
+				self._stack[self._currentLevel][name] = [ref]
+			else:
+				assert(type(r) == list and 'trying to shadow a variable with a function name')
+				r.append(ref)
+		else:
 			assert(not self.find(name))
 
-		self._stack[self._currentLevel][name] = ref
+			self._stack[self._currentLevel][name] = ref
 
 
 	def find(self, name):
@@ -190,11 +203,13 @@ class ModuleTranslator(object):
 		parameterTypes = []
 		parameterTypes.append(Type.pointer(Type.int(8)))
 		functionType = Type.function(retType, parameterTypes)
-		self._module.add_function(functionType, 'puts')
+		func = self._module.add_function(functionType, 'puts')
+		self._scopeStack.add('puts', func)
 
 		# abort
 		functionType = Type.function(Type.void(), [])
-		self._module.add_function(functionType, 'abort')
+		func = self._module.add_function(functionType, 'abort')
+		self._scopeStack.add('abort', func)
 
 
 
@@ -208,6 +223,9 @@ class ModuleTranslator(object):
 		self._scopeStack = _ScopeStack() # used to resolve variables
 		self._breakTargets = [] # every loop pushes / pops basic blocks onto this stack for usage by break.
 		self._continueTargets = [] # see breakTargets
+
+		self._moduleName = os.path.split(self._filename)[1] 
+		self._packageName = ''
 
 		# add some helper functions / prototypes / ... to the module
 		self._addHelperFunctions()
@@ -296,20 +314,21 @@ class ModuleTranslator(object):
 
 
 		ci = _childrenIterator(tree)
-		modifiers = ci.next().text
+		modifiers = ci.next()
 		name = ci.next().text
-		returnType = ci.next().text
+		returnTypeName = ci.next().text
 		argList = ci.next()
 
-		if returnType == 'int32':
+		if returnTypeName == 'int32':
 			returnType = Type.int(32)
-		elif returnType == 'void':
+		elif returnTypeName == 'void':
 			returnType = Type.void()
 		else:
 			self._raiseException(RecoverableCompileError, tree=tree.getChild(1), inlineText='unknown type')
 
 
 		functionParam_ty = []
+		functionParamTypeNames = []
 		functionParamNames = []
 		for i in range(argList.getChildCount() / 2):
 			argName = argList.getChild(i * 2).text
@@ -321,31 +340,83 @@ class ModuleTranslator(object):
 				raise NotImplementedError('unsupported type: %s' % typeName)
 
 			functionParam_ty.append(arg_ty)
+			functionParamTypeNames.append(argTypeName)
 			functionParamNames.append(argName)
 
 
 		funcProto = Type.function(returnType, functionParam_ty)
 
+		# parse modifiers
+		modMangling = 'default'
+		for i in range(modifiers.getChildCount() / 2):
+			key = modifiers.children[2 * i].text
+			value = modifiers.children[2 * i + 1].text
+
+			# TODO implement better checking, duplicate keys etc.
+
+			if key == 'mangling':
+				if value not in ['C', 'default']:
+					self._raiseException(RecoverableCompileError, tree=tree.children[2 * i + 1], inlineText='unknown function modifier')
+				modMangling = value
+			else:
+				self._raiseException(RecoverableCompileError, tree=tree.children[2 * i], inlineText='unknown function modifier')
+
+
 		# was there already a function with this name?
-		# if everything matches, just ignore - otherwise fail
-		oldFunc = self._scopeStack.find(name)
-		if oldFunc:
-			# compare types
-			if oldFunc.type.pointee != funcProto:
-				s = 'expected type: %s' % oldFunc.type.pointee
-				self._raiseException(RecoverableCompileError, tree=tree, inlineText='prototype does not match earlier declaration / definition', postText=s)
+		# check according to overload rules if everything is ok with this declaration
+		functionsWithThisName = self._scopeStack.find(name)
 
-			# TODO compare more?
-			# maybe add argument names if they were omitted previously?
-		else:
-			func = self._module.add_function(funcProto, name)
+		func = None
+		if functionsWithThisName:
+			for other in functionsWithThisName:
+				# TODO think about limitations of overloading
 
+				# check that a function is not defined several times using the same (returnType, paramterTypes)
+				if other.type.pointee == funcProto:
+					func = other
+					break
+
+		if not func:
+			if name == 'main' or modMangling == 'C':# FIXME main should be mangled too, but then we need a 'hidden' main function
+				mangledName = name
+			else:
+				mangledName = mangleFunction(self._packageName, self._moduleName, name, returnTypeName, functionParamTypeNames)
+
+			# a function with a matching signature was not found
+			try:
+				# make really sure there is no function with this name
+				if self._module.get_function_named(mangledName):
+					nameUsed = True
+			except:
+				nameUsed = False
+			if nameUsed:
+				s1 = 'mangled name already in use: %s' % mangledName
+				s2 ='internal compiler error: name mangling probably not working correctly. Please submit bug report.'
+				self._raiseException(CompileError, tree=tree.getChild(1), inlineText=s1, postText=s2)
+
+
+			func = self._module.add_function(funcProto, mangledName)
+			
 			for i,x in enumerate(functionParamNames):
 				func.args[i].name = x
 
 			# add function name to scope
 			self._scopeStack.add(name, func)
 
+		return func
+
+		# add function
+		#if oldFunc:
+		#	# compare types
+		#	if oldFunc.type.pointee != funcProto:
+		#		s = 'expected type: %s' % oldFunc.type.pointee
+		#		self._raiseException(RecoverableCompileError, tree=tree, inlineText='prototype does not match earlier declaration / definition', postText=s)
+
+		#	# TODO compare more?
+		#	# maybe add argument names if they were omitted previously?
+		#else:
+
+	
 
 	def _onDefFunction(self, tree):
 		assert(tree.text == 'DEFFUNC')
@@ -356,9 +427,8 @@ class ModuleTranslator(object):
 		returnType = ci.next().text
 		argList = ci.next()
 
-		self._onDefProtoype(tree)
-		func = self._scopeStack.find(name)
-		func.name = name
+		func = self._onDefProtoype(tree)
+		#func.name = name
 
 		# differentiate between declarations and definitions
 		if tree.getChildCount() == 4:
@@ -761,11 +831,28 @@ class ModuleTranslator(object):
 
 		ci = _childrenIterator(tree)
 		callee = ci.next().text
+		nArguments = tree.getChildCount() - 1
 
-		try:
-			function = self._module.get_function_named(callee)
-		except LLVMException:
+		# find function
+		functions = self._scopeStack.find(callee)
+		if not functions:
 			self._raiseException(RecoverableCompileError, tree=tree.getChild(0), inlineText='undefined function')
+
+		# select depending on number of arguments, ignoring anything else for now
+		# FIXME
+		function = None
+		for f in functions:
+			if len(f.args) == nArguments:
+				function = f
+				break
+
+		if not function:
+			s1 = 'no matching function found'
+			s2 = ['canditates:']
+			for f in functions:
+				s2.append('\t%s' % f.type.pointee)
+			s2 = '\n'.join(s2)
+			self._raiseException(RecoverableCompileError, tree=tree.getChild(0), inlineText=s1, postText=s2)
 
 
 		params = []
@@ -870,7 +957,11 @@ class ModuleTranslator(object):
 	def _simpleAssignment(self, name, value, treeForErrorReporting=None):
 		ref = self._scopeStack.find(name)
 		if ref:
-			# variable already exists
+			# variable already exists / there is a function with this name
+
+			if type(ref) == list:
+				s1 = 'can not assign to function name'
+				self._raiseException(RecoverableCompileError, tree=treeForErrorReporting, inlineText=s1)
 
 			# check type
 			if value.type != ref.type.pointee:
