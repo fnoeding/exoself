@@ -102,6 +102,10 @@ def main():
 	if options.optLevel not in optPasses:
 		op.error('optimization level not supported')
 
+	# make filenames absolute
+	for i in range(len(args)):
+		args[i] = os.path.abspath(args[i])
+
 
 	fn = args[0]
 	path, fn = os.path.split(fn)
