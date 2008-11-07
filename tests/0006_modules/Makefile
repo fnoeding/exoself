@@ -15,7 +15,7 @@ run: t$(testnum).bc
 
 
 t$(testnum).bc: $(objects)
-	@$(LLVM_LINK) -o t$(testnum).bc $(objects)
+	@$(LLVM_LINK) -f -o t$(testnum).bc $(objects)
 
 
 $(objects): $(sources)

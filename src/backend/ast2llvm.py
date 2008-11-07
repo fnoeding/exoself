@@ -35,7 +35,7 @@ from llvm import *
 from llvm.core import *
 from llvm.ee import *
 
-import copy
+import os.path
 
 def _childrenIterator(tree):
 	n = tree.getChildCount()
@@ -106,6 +106,7 @@ class ModuleTranslator(object):
 	def __init__(self):
 		self._dispatchTable = {}
 		self._dispatchTable['MODULE'] = self._onModule
+		self._dispatchTable['IMPORTALL'] = self._onImportAll
 		self._dispatchTable['DEFFUNC'] = self._onDefFunction
 		self._dispatchTable['BLOCK'] = self._onBlock
 		self._dispatchTable['pass'] = self._onPass
@@ -241,6 +242,52 @@ class ModuleTranslator(object):
 				break
 		if self._errors:
 			raise CompileError('errors occured during compilation: aborting')
+
+	def _onImportAll(self, tree):
+		assert(tree.text == 'IMPORTALL')
+		assert(os.path.isabs(self._filename)) # also checkd in translateAST, but be really sure
+
+		modPath = tree.getChild(0).text	
+		if modPath.startswith('.'):
+			modPath = modPath.split('.')
+			if modPath[0] == '':
+				modPath.pop(0)
+			
+			path, ignored = os.path.split(self._filename)
+			for i in range(len(modPath)):
+				if modPath[i] != '':
+					break
+
+				path, ignored = os.path.split(path)
+			toImport = os.path.join(path, *modPath[i:]) + '.es'
+		else:
+			raise NotImplementedError('absolute imports are not supported, yet')
+
+		if not os.path.exists(toImport):
+			s1 = 'can not find module'
+			s2 = 'file does not exist: %s' % toImport
+			self._raiseException(RecoverableCompileError, tree=tree.getChild(0), inlineText=s1, postText=s2)
+
+		# now scan the other module for definitions and add them to our namespace
+		f = file(toImport, 'rt')
+		toImportData = f.read()
+		f.close()
+
+		# FIXME FIXME FIXME very ugly hack...
+		# use another ModuleTranslator or something like that, then get all definitions and insert them here
+		# especially since this process is recursive!
+		# this will definitely break when we introduce name mangling!
+		import frontend
+
+		numErrors, ast = frontend.sourcecode2AST(toImportData)
+		assert(numErrors == 0)
+
+		# extract function declarations from AST
+		assert(ast.text == 'MODULE')
+		for c in ast.children:
+			if c.text == 'DEFFUNC':
+				self._onDefProtoype(c)
+		
 
 
 	def _onDefProtoype(self, tree):
@@ -910,10 +957,12 @@ class ModuleTranslator(object):
 
 
 
-	def translateAST(self, tree, filename='', sourcecode=''):
+	def translateAST(self, tree, absFilename, sourcecode=''):
 		assert(tree.text == 'MODULE')
 
-		self._filename = filename
+		assert(os.path.isabs(absFilename))
+
+		self._filename = absFilename
 		self._sourcecode = sourcecode
 		self._sourcecodeLines = sourcecode.splitlines()
 
@@ -926,6 +975,7 @@ class ModuleTranslator(object):
 
 		return self._module
 
+	
 
 def run(module, function):
 	mp = ModuleProvider.new(module)

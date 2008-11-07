@@ -55,6 +55,7 @@ tokens {
 	ASSIGNLIST;
 	LISTASSIGN;
 	FOREXPRESSION;
+	IMPORTALL;
 }
 
 
@@ -72,6 +73,8 @@ IN: 'in';
 BREAK: 'break';
 CONTINUE: 'continue';
 WHILE: 'while';
+IMPORT: 'import';
+FROM: 'from';
 OR: 'or';
 XOR: 'xor';
 AND: 'and';
@@ -95,6 +98,8 @@ fragment Float: Digit* '.' Digit+ (('e' | 'E') ('+' | '-')? Digit+)?;
 INTEGER: SpacedDigit | ('0x' | '0X') SpacedHexDigit | ('0b' | '0B') SpacedBinaryDigit;// octal integers are also matched by SpacedDigit
 FLOAT: Float;// TODO HexFloat for exact representation
 NAME: (Letter | '_') (Letter | Digit | '_')*;
+
+MODULENAME: '.'* NAME ('.' NAME)*;
 
 
 
@@ -126,6 +131,7 @@ LBRACKET: '[';
 RBRACKET: ']';
 ASSIGN: '=';
 COMMA: ',';
+DOT: '.';
 LESS: '<';
 LESSEQUAL: '<=';
 EQUAL: '==';
@@ -141,7 +147,11 @@ GREATER: '>';
 
 start_module: global_stmt* EOF-> ^(MODULE global_stmt*);
 
-global_stmt: deffunc;
+global_stmt: deffunc | import_stmt;
+
+import_stmt:
+	FROM MODULENAME IMPORT STAR -> ^(IMPORTALL MODULENAME);
+
 
 compound_stmt: simple_stmt | if_stmt | for_stmt | while_stmt;
 
