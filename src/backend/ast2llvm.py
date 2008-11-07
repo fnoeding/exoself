@@ -263,8 +263,9 @@ class ModuleTranslator(object):
 
 	def _onImportAll(self, tree):
 		assert(tree.text == 'IMPORTALL')
-		assert(os.path.isabs(self._filename)) # also checkd in translateAST, but be really sure
+		assert(os.path.isabs(self._filename)) # also checked in translateAST, but be really sure
 
+		# get path to other module
 		modPath = tree.getChild(0).text	
 		if modPath.startswith('.'):
 			modPath = modPath.split('.')
@@ -286,26 +287,74 @@ class ModuleTranslator(object):
 			s2 = 'file does not exist: %s' % toImport
 			self._raiseException(RecoverableCompileError, tree=tree.getChild(0), inlineText=s1, postText=s2)
 
-		# now scan the other module for definitions and add them to our namespace
+		# load data
 		f = file(toImport, 'rt')
 		toImportData = f.read()
 		f.close()
 
-		# FIXME FIXME FIXME very ugly hack...
-		# use another ModuleTranslator or something like that, then get all definitions and insert them here
-		# especially since this process is recursive!
-		# this will definitely break when we introduce name mangling!
+
+		# tricky part:
+		#     translate module to AST
+		#     use *another* module translator to translate the module
+		#         recurse, if necessary
+		#     export symbols
+		#     insert symbols in our module
+
+		# FIXME possible infinite recursion: circular dependencies are not detected
+		# FIXME very inefficient:
+		#     ideally first a dependency graph is generated
+		#     this can be used by any make like tool to instruct the compiler to generate (precompiled???) headers
+		#     the headers can be parsed much faster
+		#     additionally we should maintain an internal list of already parsed modules
 		import frontend
 
 		numErrors, ast = frontend.sourcecode2AST(toImportData)
-		assert(numErrors == 0)
+		if numErrors:
+			self._raiseException(CompileError, tree=tree.children[0], inlineText='module contains errors')
 
-		# extract function declarations from AST
-		assert(ast.text == 'MODULE')
-		for c in ast.children:
-			if c.text == 'DEFFUNC':
-				self._onDefProtoype(c)
-		
+		mt = ModuleTranslator()
+		mt.translateAST(ast, toImport, toImportData)
+		d = mt._exportGloballyVisibleSymbols()
+
+
+		# many strange things can happen here
+		# assume a user has two modules with the same package names, same module names
+		# and then defines in both modules a function
+		#     def f() as int32;
+		# but with different bodies. Now both function get the same mangled name and we have no idea which one to use...
+		# At least this case will generate a linker error
+		for x in d['functions']:
+			try:
+				self._module.get_function_named(x['mangledName'])
+				mangledName = True
+			except:
+				mangledName = False
+
+			if not mangledName:
+				func = self._module.add_function(x['type'], x['mangledName'])
+				self._scopeStack.add(x['name'], func)
+			else:
+				# check that types match
+				blockers = self._scopeStack.find(x['name']) # FIXME is this really enough? maybe we should scan all functions to get the offending one
+				match = False
+				for b in blockers:
+					if b.type.pointee == x['type']:
+						match = True
+
+				if not match:
+					# that's bad! That means self._scopeStack.find(x['name']) is not enough to find all offenders!
+					# maybe another bug, too...
+					s1 = 'module caused internal error'
+					s2 = ['imported module contains a function with the same mangled name as a function in the current module']
+					s2.append('name: %s; mangled name: %s' % (x['name'], x['mangledName']))
+					s2.append('Internal compiler error. Please submit a bug report.')
+					s2 = '\n'.join(s2)
+					self._raiseException(CompileError, tree=tree.children[0], inlineText=s1, postText=s2)
+
+
+		# TODO import other symbols, types, etc
+
+
 
 
 	def _onDefProtoype(self, tree):
@@ -463,7 +512,6 @@ class ModuleTranslator(object):
 			else:
 				currentBB = self._currentBuilder.block
 				if not (currentBB.instructions and currentBB.instructions[-1].is_terminator):
-					# FIXME assert with a good description would be way better...
 					lastChild = tree.getChild(tree.getChildCount() - 1)
 					s = self._generateContext(preText='warning:', postText='control flow possibly reaches end of non-void function. Inserting trap instruction...', lineBase1=lastChild.line, numAfter=3)
 					print s
@@ -556,10 +604,6 @@ class ModuleTranslator(object):
 		# children: expr block (expr block)* block?
 		#           if         else if       else
 		
-		# FIXME the bindings do not currently allow to create BasicBlock's that are not associated to any function
-		# so we always append to the end of the function
-		# in the generated code this will create a huge mess, but optimization should easily fix this
-	
 		mergeBB = self._currentFunction.append_basic_block('if_merge')
 		# iterate over all 'if' and 'else if' blocks
 		for i in range(tree.getChildCount() // 2):
@@ -801,7 +845,7 @@ class ModuleTranslator(object):
 
 		entryBB = self._currentFunction.get_entry_basic_block()
 		entryBuilder = Builder.new(entryBB)
-		# FIXME workaround: llvm-py segfaults when we call position_at_beginning on an empty block
+		# workaround: llvm-py segfaults when we call position_at_beginning on an empty block
 		if entryBB.instructions:
 			entryBuilder.position_at_beginning(entryBB)
 		var = entryBuilder.alloca(type, name)
@@ -1064,7 +1108,37 @@ class ModuleTranslator(object):
 
 		self._module.verify()
 
+
 		return self._module
+
+
+	def _exportGloballyVisibleSymbols(self):
+		assert(self._module and 'run translateAST first')
+
+		# globally visible symbols
+		d = {}
+		d['package'] = self._packageName
+		d['module'] = self._moduleName
+
+		functions = []
+		d['functions'] = functions
+
+		for key, value in self._scopeStack._stack[0].items():
+			if type(value) == list:
+				# function
+				for x in value:
+					f = {}
+					f['name'] = key
+					f['mangledName'] = x.name
+					f['type'] = x.type.pointee
+
+					functions.append(f)
+			else:
+				# global variable
+				assert(0 and 'no global variables supported')
+
+		return d
+
 
 	
 
