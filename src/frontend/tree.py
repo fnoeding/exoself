@@ -36,7 +36,7 @@ class Tree(object):
 		self.text = text
 		self.children = []
 		self.line = line
-		self.charPos = 0
+		self.charPos = charPos
 
 
 	def copy(self, copyChildren):
