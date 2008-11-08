@@ -1,3 +1,5 @@
+module t007
+
 def main() as int32
 	{42;
 	4___2;

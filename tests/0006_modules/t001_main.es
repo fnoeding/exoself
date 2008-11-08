@@ -1,3 +1,4 @@
+module tt00
 
 # use explicit declaration
 

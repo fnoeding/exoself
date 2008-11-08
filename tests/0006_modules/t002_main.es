@@ -1,3 +1,4 @@
+module tt00
 from .t002_moda import *
 from .t002_modb import *
 

@@ -1,3 +1,4 @@
+module t000
 
 def g() as int32
 {

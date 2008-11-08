@@ -1,3 +1,4 @@
+module t015
 
 def main() as int32
 {

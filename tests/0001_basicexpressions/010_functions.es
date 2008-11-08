@@ -1,3 +1,5 @@
+module t010
+
 
 def f() as int32
 {

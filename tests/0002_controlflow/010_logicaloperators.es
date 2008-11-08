@@ -1,3 +1,4 @@
+module t010
 
 def main() as int32
 {

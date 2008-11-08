@@ -61,19 +61,6 @@ def runTest(filebase):
 		r = runExoself(filebase, '-c', True)
 		return not r
 
-	if not runExoself(filebase, '-A'): # only ast
-		return False
-
-	# verify ast (if available)
-	if os.path.exists('%s.ast' % filebase):
-		expectedAST = file('%s.ast' % filebase).read()
-		expectedAST = ' '.join(expectedAST.split()).strip()
-
-		astString = file('../tests_tmp/%s.ast' % filename).read().strip()
-		if astString != expectedAST:
-			print 'received ast: %s\nexpected ast: %s' % (astString, expectedAST)
-			return False
-
 	if not runExoself(filebase, '-c'): # generate bitcode
 		return False
 
@@ -114,7 +101,7 @@ def main():
 	# switch to temp dir, cleanup
 	# several temporary files will be generated here
 	os.chdir('../tests_tmp')
-	os.system('rm -f *.ast *.ll *.bc')
+	os.system('rm -f *.ll *.bc')
 
 	total = 0
 	failed = 0

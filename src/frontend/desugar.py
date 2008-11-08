@@ -63,8 +63,15 @@ def _desugarLoopElse(tree):
 	tree.addChild(tElse)
 
 
+def _fixPackageAndModuleNames(tree):
+	if tree.text == 'package' or tree.text == 'IMPORTALL':
+		newText = [x.text for x in tree.children]
+		del tree.children[1:]
+		tree.children[0].text = ''.join(newText)
 
-_actions = [_desugarLoopElse]
+
+
+_actions = [_desugarLoopElse, _fixPackageAndModuleNames]
 
 
 def desugar(tree):

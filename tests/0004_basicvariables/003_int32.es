@@ -1,3 +1,4 @@
+module t003
 
 def f(x as int32) as int32
 {

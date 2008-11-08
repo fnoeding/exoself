@@ -1,3 +1,6 @@
+module t008
+
+
 def f() as int32
 {
 	return 17;

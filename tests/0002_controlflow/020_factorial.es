@@ -1,3 +1,4 @@
+module t020
 
 def fac(n as int32) as int32
 {

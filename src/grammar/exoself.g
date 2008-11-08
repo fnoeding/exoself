@@ -41,7 +41,7 @@ options {
 
 
 tokens {
-	MODULE;
+	MODULESTART;
 	DEFFUNC;
 	DEFFUNCARGS;
 	DEFFUNCMODIFIERS;
@@ -60,6 +60,8 @@ tokens {
 
 
 // keywords
+PACKAGE: 'package';
+MODULE: 'module';
 DEF: 'def';
 AS: 'as';
 PASS: 'pass';// in principle not needed, since we are using no significant whitespace. But reserve it for later extension in that direction
@@ -98,11 +100,6 @@ fragment Float: Digit* '.' Digit+ (('e' | 'E') ('+' | '-')? Digit+)?;
 INTEGER: SpacedDigit | ('0x' | '0X') SpacedHexDigit | ('0b' | '0B') SpacedBinaryDigit;// octal integers are also matched by SpacedDigit
 FLOAT: Float;// TODO HexFloat for exact representation
 NAME: (Letter | '_') (Letter | Digit | '_')*;
-
-MODULENAME: '.'* NAME ('.' NAME)*;
-
-
-
 
 // whitespace, comments
 COMMENT: '#' (~('\n' | '\r'))* ('\n' | '\r' ('\n')?) {$channel=HIDDEN};
@@ -145,12 +142,19 @@ GREATER: '>';
 //***************************************************************************
 
 
-start_module: global_stmt* EOF-> ^(MODULE global_stmt*);
+start_module: package_stmt? module_stmt? global_stmt* EOF-> ^(MODULESTART package_stmt? module_stmt? global_stmt*);
+
+
+package_stmt: PACKAGE^ package_name;
+package_name: NAME (DOT NAME)*;
+module_stmt: MODULE^ NAME;
+
 
 global_stmt: deffunc | import_stmt;
 
 import_stmt:
-	FROM MODULENAME IMPORT STAR -> ^(IMPORTALL MODULENAME);
+	FROM module_name IMPORT STAR -> ^(IMPORTALL module_name);
+module_name: DOT* NAME (DOT NAME)*;
 
 
 compound_stmt: simple_stmt | if_stmt | for_stmt | while_stmt;

@@ -36,6 +36,7 @@ from llvm.core import *
 from llvm.ee import *
 
 import os.path
+import re
 
 from mangle import *
 
@@ -118,7 +119,9 @@ class RecoverableCompileError(CompileError):
 class ModuleTranslator(object):
 	def __init__(self):
 		self._dispatchTable = {}
-		self._dispatchTable['MODULE'] = self._onModule
+		self._dispatchTable['MODULESTART'] = self._onModuleStart
+		self._dispatchTable['package'] = self._onPackage
+		self._dispatchTable['module'] = self._onModule
 		self._dispatchTable['IMPORTALL'] = self._onImportAll
 		self._dispatchTable['DEFFUNC'] = self._onDefFunction
 		self._dispatchTable['BLOCK'] = self._onBlock
@@ -213,8 +216,8 @@ class ModuleTranslator(object):
 
 
 
-	def _onModule(self, tree):
-		assert(tree.text == 'MODULE')
+	def _onModuleStart(self, tree):
+		assert(tree.text == 'MODULESTART')
 
 		self._errors = 0
 		self._warnings = 0
@@ -227,10 +230,24 @@ class ModuleTranslator(object):
 		self._moduleName = os.path.split(self._filename)[1] 
 		self._packageName = ''
 
+		# first pass: process package and module statements
+		# if these statements exist they are the first two
+		for x in tree.children[:2]:
+			if x.text in ['package', 'module']:
+				self._dispatch(x)
+
+		# make sure package and module names are valid
+		m = re.match('[a-zA-Z_][a-zA-Z_0-9]*', self._moduleName)
+		bad = True
+		if m and m.span() == (0, len(self._moduleName)):
+			bad = False
+		if bad:
+			self._raiseException(CompileError, postText='Module filenames should begin with alpha character or underscore otherwise it\'s not possible to import them. To disable this error message set a valid module name using the \'module\' statement.')
+
 		# add some helper functions / prototypes / ... to the module
 		self._addHelperFunctions()
 
-		# first pass: make all functions available, so we don't need any stupid forward declarations
+		# second pass: make all functions available, so we don't need any stupid forward declarations
 		for x in _childrenIterator(tree):
 			try:
 				if x.text == 'DEFFUNC':
@@ -261,9 +278,21 @@ class ModuleTranslator(object):
 		if self._errors:
 			raise CompileError('errors occured during compilation: aborting')
 
+	def _onPackage(self, tree):
+		assert(tree.text == 'package')
+
+		self._packageName = tree.children[0].text
+
+	def _onModule(self, tree):
+		assert(tree.text == 'module')
+
+		self._moduleName = tree.children[0].text
+
+
 	def _onImportAll(self, tree):
 		assert(tree.text == 'IMPORTALL')
 		assert(os.path.isabs(self._filename)) # also checked in translateAST, but be really sure
+
 
 		# get path to other module
 		modPath = tree.getChild(0).text	
@@ -1093,7 +1122,7 @@ class ModuleTranslator(object):
 
 
 	def translateAST(self, tree, absFilename, sourcecode=''):
-		assert(tree.text == 'MODULE')
+		assert(tree.text == 'MODULESTART')
 
 		assert(os.path.isabs(absFilename))
 

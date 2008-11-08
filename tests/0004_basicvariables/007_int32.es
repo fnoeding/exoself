@@ -1,3 +1,4 @@
+module t007
 def f(x as int32, y as int32) as int32
 {
 	x = y + 2;

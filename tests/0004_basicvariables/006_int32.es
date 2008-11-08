@@ -1,3 +1,4 @@
+module t006
 def f() as int32
 {
 	return 7;

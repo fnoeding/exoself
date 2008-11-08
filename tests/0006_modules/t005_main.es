@@ -1,9 +1,8 @@
-module t000
+package t005
+module main
 
 def main() as int32
 {
-	x = 5;
-	x as int32;
-
 	return 0;
 }
+
