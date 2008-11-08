@@ -39,6 +39,7 @@ import os.path
 import re
 
 from mangle import *
+from scopestack import ScopeStack, ScopeStackWithProxy
 
 def _childrenIterator(tree):
 	n = tree.getChildCount()
@@ -46,63 +47,6 @@ def _childrenIterator(tree):
 		yield tree.getChild(i)
 
 
-class _ScopeStackWithProxy(object):
-	def __init__(self, ss):
-		self._ss = ss
-
-	def __enter__(self):
-		self._ss.pushScope()
-
-	def __exit__(self, type, value, tb):
-		self._ss.popScope()
-
-
-
-class _ScopeStack(object):
-	def __init__(self):
-		self._stack = {0: {}}
-		self._currentLevel = 0
-
-
-	def popScope(self):
-		assert(self._currentLevel > 0)
-
-		del self._stack[self._currentLevel]
-		self._currentLevel -= 1
-
-
-	def pushScope(self):
-		self._currentLevel += 1
-		self._stack[self._currentLevel] = {}
-
-
-	def add(self, name, ref):
-		if ref.type.pointee.kind == TYPE_FUNCTION:
-			# there may be several functions using the same name
-			# --> function overloading
-
-			# check that there is no variable shadowing that would shadow this function
-			r = self.find(name)
-			if not r:
-				self._stack[self._currentLevel][name] = [ref]
-			else:
-				assert(type(r) == list and 'trying to shadow a variable with a function name')
-				r.append(ref)
-		else:
-			assert(not self.find(name))
-
-			self._stack[self._currentLevel][name] = ref
-
-
-	def find(self, name):
-		for x in range(self._currentLevel, -1, -1):
-			m = self._stack[x]
-			try:
-				return m[name]
-			except:
-				pass
-
-		return None
 
 
 class CompileError(Exception):
@@ -270,7 +214,7 @@ class ModuleTranslator(object):
 		self._warnings = 0
 
 		self._module = Module.new('main_module')
-		self._scopeStack = _ScopeStack() # used to resolve variables
+		self._scopeStack = ScopeStack() # used to resolve variables
 		self._breakTargets = [] # every loop pushes / pops basic blocks onto this stack for usage by break.
 		self._continueTargets = [] # see breakTargets
 
@@ -566,7 +510,7 @@ class ModuleTranslator(object):
 			return
 		assert(tree.getChild(4).text == 'BLOCK')
 
-		with _ScopeStackWithProxy(self._scopeStack):
+		with ScopeStackWithProxy(self._scopeStack):
 
 			self._currentFunction = func
 			entryBB = func.append_basic_block('entry')
@@ -608,7 +552,7 @@ class ModuleTranslator(object):
 	def _onBlock(self, tree):
 		assert(tree.text == 'BLOCK')
 
-		with _ScopeStackWithProxy(self._scopeStack):
+		with ScopeStackWithProxy(self._scopeStack):
 			for x in _childrenIterator(tree):
 				self._dispatch(x)
 
@@ -732,7 +676,7 @@ class ModuleTranslator(object):
 		assert(1 <= loopExpression.getChildCount() <= 3)
 		n = loopExpression.getChildCount()
 
-		with _ScopeStackWithProxy(self._scopeStack):
+		with ScopeStackWithProxy(self._scopeStack):
 			inductVar = self._scopeStack.find(loopVarName)
 			if inductVar:
 				assert(inductVar.type.pointee == Type.int(32)) # 'range' expects some kind of integer...
@@ -807,7 +751,7 @@ class ModuleTranslator(object):
 		assert(tree.text == 'while')
 
 
-		with _ScopeStackWithProxy(self._scopeStack):
+		with ScopeStackWithProxy(self._scopeStack):
 			# create blocks
 			headBB = self._currentFunction.append_basic_block('head')
 			bodyBB = self._currentFunction.append_basic_block('body')
