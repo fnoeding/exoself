@@ -72,7 +72,12 @@ class ScopeStack(object):
 				self._stack[self._currentLevel][name] = [ref]
 			else:
 				assert(type(r) == list and 'trying to shadow a variable with a function name')
-				r.append(ref)
+
+				# do NOT use r to append!
+				if name in self._stack[self._currentLevel]:
+					self._stack[self._currentLevel][name].append(ref)
+				else:
+					self._stack[self._currentLevel][name] = [ref]
 		else:
 			assert(not self.find(name))
 
@@ -80,12 +85,25 @@ class ScopeStack(object):
 
 
 	def find(self, name):
+		results = []
+
 		for x in range(self._currentLevel, -1, -1):
 			m = self._stack[x]
-			try:
-				return m[name]
-			except:
-				pass
 
-		return None
+			try:
+				v = m[name]
+			except:
+				continue
+
+			if type(v) == list:
+				# function
+				results.extend(v)
+			else:
+				return v
+
+
+		if results:
+			return results
+		else:
+			return None
 
