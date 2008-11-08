@@ -200,7 +200,7 @@ class ModuleTranslator(object):
 		
 
 
-	def _addHelperFunctions(self):
+	def _addHelperFunctionsPreTranslation(self):
 		# puts
 		retType= Type.int(32)
 		parameterTypes = []
@@ -213,6 +213,53 @@ class ModuleTranslator(object):
 		functionType = Type.function(Type.void(), [])
 		func = self._module.add_function(functionType, 'abort')
 		self._scopeStack.add('abort', func)
+
+
+	def _addHelperFunctionsPostTranslation(self):
+		# if this module contains a main function emit code which will call it
+
+		flist = self._scopeStack.find('main')
+
+		if flist:# other checks prevent flist being longer than 1 element
+			# generate code too call main
+			mainFunc = flist[0]
+
+			s = []
+			s.append('The main function defined in this module has an unsupported signature.')
+			s.append('supported signatures:')
+			s.append('\tdef main() as int32')
+			s.append('\tdef main() as void')
+
+
+			# incompatible return type?
+			retType = mainFunc.type.pointee.return_type
+			if retType != Type.void() and retType != Type.int(32):
+				self._raiseException(RecoverableCompileError, postText=s)
+
+			# has arguments?
+			if len(mainFunc.args) == 0:
+				functionType= Type.function(Type.int(32), [])
+				function = self._module.add_function(functionType, 'main')
+
+				entryBB = function.append_basic_block('entry')
+				BB = function.append_basic_block('bb')
+
+				b = Builder.new(entryBB)
+				b.branch(BB)
+
+				b = Builder.new(BB)
+				r = b.call(mainFunc, [])
+
+				if retType != Type.void():
+					b.ret(r)
+				else:
+					b.ret(Constant.int(Type.int(32), 0))
+			else:
+				# TODO implement version with parameters
+				self._raiseException(RecoverableCompileError, postText=s)
+
+
+
 
 
 
@@ -245,7 +292,7 @@ class ModuleTranslator(object):
 			self._raiseException(CompileError, postText='Module filenames should begin with alpha character or underscore otherwise it\'s not possible to import them. To disable this error message set a valid module name using the \'module\' statement.')
 
 		# add some helper functions / prototypes / ... to the module
-		self._addHelperFunctions()
+		self._addHelperFunctionsPreTranslation()
 
 		# second pass: make all functions available, so we don't need any stupid forward declarations
 		for x in _childrenIterator(tree):
@@ -264,7 +311,7 @@ class ModuleTranslator(object):
 			raise CompileError('errors occured during checking global statements: aborting')
 
 
-		# second pass: translate code
+		# third pass: translate code
 		for x in _childrenIterator(tree):
 			try:
 				self._dispatch(x)
@@ -277,6 +324,10 @@ class ModuleTranslator(object):
 				break
 		if self._errors:
 			raise CompileError('errors occured during compilation: aborting')
+
+		# finally add some more helper functions / prototypes / ... to the module
+		self._addHelperFunctionsPostTranslation()
+
 
 	def _onPackage(self, tree):
 		assert(tree.text == 'package')
@@ -455,7 +506,9 @@ class ModuleTranslator(object):
 					break
 
 		if not func:
-			if name == 'main' or modMangling == 'C':# FIXME main should be mangled too, but then we need a 'hidden' main function
+			if name == 'main':# a user defined main gets called by a compiler defined main function
+				mangledName = '__ES_main'
+			elif modMangling == 'C':
 				mangledName = name
 			else:
 				mangledName = mangleFunction(self._packageName, self._moduleName, name, returnTypeName, functionParamTypeNames)
@@ -506,7 +559,6 @@ class ModuleTranslator(object):
 		argList = ci.next()
 
 		func = self._onDefProtoype(tree)
-		#func.name = name
 
 		# differentiate between declarations and definitions
 		if tree.getChildCount() == 4:
