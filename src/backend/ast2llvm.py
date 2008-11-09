@@ -40,6 +40,10 @@ import re
 
 from mangle import *
 from scopestack import ScopeStack, ScopeStackWithProxy
+from typesystem import *
+from esfunction import ESFunction
+from esvalue import ESValue
+from esvariable import ESVariable
 
 def _childrenIterator(tree):
 	n = tree.getChildCount()
@@ -517,7 +521,7 @@ class ModuleTranslator(object):
 
 			# add variables
 			for i in range(len(func.args)):
-				self._createAllocaForVar(func.args[i].name, func.args[i].type, func.args[i], treeForErrorReporting=tree)
+				self._createAllocaForVar(func.args[i].name, func.args[i].type, u'int32', func.args[i], treeForErrorReporting=tree) # FIXME use real argument type
 
 
 			addedBRToEntryBB = False
@@ -561,14 +565,15 @@ class ModuleTranslator(object):
 	def _onReturn(self, tree):
 		assert(tree.text == 'return')
 
-		value = self._dispatch(tree.getChild(0))
+		esValue = self._dispatch(tree.getChild(0))
 
 		expectedRetType = self._currentFunction.type.pointee.return_type
-		if value.type != expectedRetType:
-			s = 'expected return type: %s' % expectedRetType
-			self._raiseException(RecoverableCompileError, tree=tree.getChild(0), inlineText='wrong return type', postText=s)
+		if esValue.llvmType != expectedRetType:
+			esValue = self._convertType(esValue, u'int32') # FIXME use real type, not hard coded one
+			#s = 'expected return type: %s' % expectedRetType
+			#self._raiseException(RecoverableCompileError, tree=tree.getChild(0), inlineText='wrong return type', postText=s)
 
-		self._currentBuilder.ret(value)
+		self._currentBuilder.ret(esValue.llvmValue)
 
 	def _onAssert(self, tree):
 		assert(tree.text == 'assert')
@@ -577,7 +582,7 @@ class ModuleTranslator(object):
 		# TODO add a compiler switch to disable inclusion of context data
 
 		value = self._dispatch(tree.getChild(0))
-		value = self._currentBuilder.icmp(IPRED_EQ, value, Constant.int(value.type, 0))
+		cond = self._currentBuilder.icmp(IPRED_EQ, value.llvmValue, Constant.int(value.llvmType, 0))
 
 		# if value is statically available bail out now / warn
 		# this does not work... investigate later
@@ -589,7 +594,7 @@ class ModuleTranslator(object):
 		thenBB = self._currentFunction.append_basic_block('assert_true') # trap path
 		elseBB = self._currentFunction.append_basic_block('assert_false') # BasicBlock(None) # TODO check if this is really ok
 
-		self._currentBuilder.cbranch(value, thenBB, elseBB)
+		self._currentBuilder.cbranch(cond, thenBB, elseBB)
 
 
 		thenBuilder = Builder.new(thenBB)
@@ -632,9 +637,12 @@ class ModuleTranslator(object):
 		mergeBB = self._currentFunction.append_basic_block('if_merge')
 		# iterate over all 'if' and 'else if' blocks
 		for i in range(tree.getChildCount() // 2):
-			cond = self._dispatch(tree.getChild(2 * i))
-			if cond.type != Type.int(1):
-				cond = self._currentBuilder.icmp(IPRED_NE, cond, Constant.int(cond.type, 0))
+			condESValue = self._dispatch(tree.getChild(2 * i))
+			if condESValue.llvmType != Type.int(1):# FIXME use comparison against bool?
+				cond = self._currentBuilder.icmp(IPRED_NE, condESValue.llvmValue, Constant.int(condESValue.llvmType, 0)) # FIXME use conversion to bool
+			else:
+				cond = condESValue.llvmValue
+
 			
 	
 			thenBB = self._currentFunction.append_basic_block('if_then')
@@ -679,11 +687,13 @@ class ModuleTranslator(object):
 		with ScopeStackWithProxy(self._scopeStack):
 			inductVar = self._scopeStack.find(loopVarName)
 			if inductVar:
-				assert(inductVar.type.pointee == Type.int(32)) # 'range' expects some kind of integer...
+				assert(inductVar.llvmType.pointee == Type.int(32)) # 'range' expects some kind of integer...
 			else:
-				inductVar = self._createAllocaForVar(loopVarName, Type.int(32))
-			start = Constant.int(inductVar.type.pointee, 0)
-			step = Constant.int(inductVar.type.pointee, 1)
+				inductVar = self._createAllocaForVar(loopVarName, Type.int(32), u'int32')# FIXME determine types from range!
+			start = ESValue(Constant.int(inductVar.llvmType.pointee, 0), inductVar.typename)
+			step = ESValue(Constant.int(inductVar.llvmType.pointee, 1), inductVar.typename)
+
+			# TODO emit warnings if range would overflow induct var type
 
 			if n == 1:
 				stop = self._dispatch(loopExpression.getChild(0))
@@ -695,8 +705,16 @@ class ModuleTranslator(object):
 				stop = self._dispatch(loopExpression.getChild(1))
 				step = self._dispatch(loopExpression.getChild(2))
 
+			# convert types
+			if stop.typename != inductVar.typename:
+				stop = self._convertType(stop, inductVar.typename)
+			if step.typename != inductVar.typename:
+				step = self._convertType(step, inductVar.typename)
+			if start.typename != inductVar.typename:
+				start = self._convertType(start, inductVar.typename)
+
 			# setup loop by initializing induction variable
-			self._currentBuilder.store(start, inductVar)
+			self._currentBuilder.store(start.llvmValue, inductVar.llvmRef)
 
 			# create blocks
 			headBB = self._currentFunction.append_basic_block('head') # decide between Up and Down
@@ -711,17 +729,17 @@ class ModuleTranslator(object):
 
 			# count up or down?
 			b = Builder.new(headBB)
-			cond = b.icmp(IPRED_SGT, step, Constant.int(step.type, 0))
+			cond = b.icmp(IPRED_SGT, step.llvmValue, Constant.int(step.llvmType, 0))
 			b.cbranch(cond, headUpBB, headDownBB)
 
 			# count down check
 			b = Builder.new(headDownBB)
-			cond = b.icmp(IPRED_SGT, b.load(inductVar), stop)
+			cond = b.icmp(IPRED_SGT, b.load(inductVar.llvmRef), stop.llvmValue)
 			b.cbranch(cond, bodyBB, mergeBB)
 
 			# count up check
 			b = Builder.new(headUpBB)
-			cond = b.icmp(IPRED_SLT, b.load(inductVar), stop)
+			cond = b.icmp(IPRED_SLT, b.load(inductVar.llvmRef), stop.llvmValue)
 			b.cbranch(cond, bodyBB, mergeBB)
 
 			# build loop body
@@ -739,8 +757,8 @@ class ModuleTranslator(object):
 
 			# now increment inductVar and branch back to head for another round
 			b = Builder.new(stepBB)
-			r = b.add(b.load(inductVar), step)
-			b.store(r, inductVar)
+			r = b.add(b.load(inductVar.llvmRef), step.llvmValue)
+			b.store(r, inductVar.llvmRef)
 			b.branch(headBB)
 
 			# done! continue outside loop body
@@ -764,10 +782,11 @@ class ModuleTranslator(object):
 			# create test
 			self._currentBuilder = Builder.new(headBB)
 			loopExpr = self._dispatch(tree.getChild(0))
-			if loopExpr.type != Type.int(1):
-				loopExpr = self._currentBuilder.icmp(IPRED_NE, loopExpr, 0)
+			if loopExpr.llvmType != Type.int(1):# FIXME use typenames?
+				# FIXME use conversion to bool
+				loopExpr = ESValue(self._currentBuilder.icmp(IPRED_NE, loopExpr.llvmValue, 0), u'bool')
 
-			self._currentBuilder.cbranch(loopExpr, bodyBB, mergeBB)
+			self._currentBuilder.cbranch(loopExpr.llvmValue, bodyBB, mergeBB)
 
 			# build body
 			self._currentBuilder = Builder.new(bodyBB)
@@ -819,11 +838,29 @@ class ModuleTranslator(object):
 			i = int(value[1:], 8)
 		else:
 			i = int(value)
+
+		# TODO move this into ESIntegerType?
+		signed = True # TODO
+		if -(2 ** 7) <= i <= 2 ** 7 - 1:
+			bits = 8
+		elif -(2 ** 15) <= i <= 2 ** 15 - 1:
+			bits = 16
+		elif -(2 ** 31) <= i <= 2 ** 31 - 1:
+			bits = 32
+		elif -(2 ** 63) <= i <= 2 ** 63 - 1:
+			bits = 64
+		else:
+			self._raiseException(RecoverableCompileError, tree=tree.children[0], inlineText='constant can not be represented by an int64')
+
+		# FIXME TODO think about a default type. int8 is somewhat inconvenient as a default type...
+		# for now just use int32 that works on every x86 / x86_84 etc.
+		if bits < 32:
+			bits = 32
 		
+		c = Constant.int(Type.int(bits), i)
+		v = ESValue(c, u'int%d' % bits)
 
-		constType = Type.int(32)
-
-		return Constant.int(constType, i)
+		return v
 
 
 	def _onFloatConstant(self, tree):
@@ -842,20 +879,22 @@ class ModuleTranslator(object):
 		assert(tree.text == 'VARIABLE')
 
 		varName = tree.getChild(0).text
-		ref = self._scopeStack.find(varName)
-		if not ref:
+		var = self._scopeStack.find(varName)
+		if not var:
 			self._raiseException(RecoverableCompileError, tree=tree.getChild(0), inlineText='undefined variable name')
 
-		return self._currentBuilder.load(ref)
+		return ESValue(self._currentBuilder.load(var.llvmRef), var.typename) # FIXME use real type!
 
 
-	def _createAllocaForVar(self, name, type, value=None, treeForErrorReporting=None):
-		assert(not isinstance(type, str))
+	def _createAllocaForVar(self, name, llvmType, typename, value=None, treeForErrorReporting=None):
+		assert(not isinstance(llvmType, str) and not isinstance(llvmType, unicode))
+		assert(isinstance(typename, unicode))
 
-		if type == Type.int(32):
-			defaultValue = Constant.int(type, 0)
+		# FIXME
+		if llvmType.kind == TYPE_INTEGER:
+			defaultValue = Constant.int(llvmType, 0)
 		else:
-			assert(0 and 'unsupported variable type: %s' % type)
+			assert(0 and 'unsupported variable type')
 
 		if value == None:
 			value = defaultValue
@@ -873,8 +912,10 @@ class ModuleTranslator(object):
 		# workaround: llvm-py segfaults when we call position_at_beginning on an empty block
 		if entryBB.instructions:
 			entryBuilder.position_at_beginning(entryBB)
-		var = entryBuilder.alloca(type, name)
-		entryBuilder.store(value, var)
+		ref = entryBuilder.alloca(llvmType, name)
+		entryBuilder.store(value, ref)
+
+		var = ESVariable(ref, typename, name)
 
 		self._scopeStack.add(name, var)
 
@@ -887,12 +928,19 @@ class ModuleTranslator(object):
 		varName = tree.getChild(0).text
 		varType = tree.getChild(1).text
 
-		if varType == 'int32':
-			varType = Type.int(32)
-		else:
-			self._raiseException(RecoverableCompileError, tree=tree.getChild(1), inlineText='unknown type')
+		raiseUnknownType = (lambda: self._raiseException(RecoverableCompileError, tree=tree.getChild(1), inlineText='unknown type'))
+		if varType.startswith('int') and varType[3].isdigit():
+			numBits = int(varType[3:])
 
-		self._createAllocaForVar(varName, varType, treeForErrorReporting=tree.getChild(0))
+			if numBits not in [8, 16, 32, 64]:
+				raiseUnknownType()
+				
+
+			llvmType = Type.int(numBits)
+		else:
+			raiseUnknownType()
+
+		self._createAllocaForVar(varName, llvmType, varType, treeForErrorReporting=tree.getChild(0))
 
 
 	def _onCallFunc(self, tree):
@@ -930,17 +978,23 @@ class ModuleTranslator(object):
 			params.append(r)
 
 		# check arguments
+		# TODO check against ES types!
 		if len(params) != len(function.args):
 			s = 'function type: %s' % function.type.pointee
 			self._raiseException(RecoverableCompileError, tree=tree.getChild(0), inlineText='wrong number of arguments', postText=s)
 
 		for i in range(len(function.args)):
-			if function.args[i].type != params[i].type:
-				s = 'argument %d type: %s' % (i + 1, function.args[i].type)
-				s2 = 'wrong argument type: %s' % params[i].type
-				self._raiseException(RecoverableCompileError, tree=tree.getChild(i + 1), inlineText=s2, postText=s)
+			if function.args[i].type != params[i].llvmType:
+				# try implicit conversion
+				try:
+					params[i] = self._convertType(params[i], u'int32') # FIXME use real type
+				except CompileError, NotImplementedError:
+					s = 'argument %d type: %s' % (i + 1, function.args[i].type)
+					s2 = 'wrong argument type: %s' % params[i].type
+					self._raiseException(RecoverableCompileError, tree=tree.getChild(i + 1), inlineText=s2, postText=s)
 
-		return self._currentBuilder.call(function, params, 'ret_%s' % callee)
+		r = self._currentBuilder.call(function, [x.llvmValue for x in params], 'ret_%s' % callee)
+		return ESValue(r, u'int32') # FIXME
 
 	def _onBasicOperator(self, tree):
 		nodeType = tree.text
@@ -951,48 +1005,74 @@ class ModuleTranslator(object):
 			v1 = self._dispatch(first)
 			v2 = self._dispatch(second)
 
+
+			if v1.typename != v2.typename:
+				v1, v2 = self._promoteTypes(v1, v2)
+
+			assert(v1.typename == v2.typename)
+
+
 			if nodeType == '*':
-				return self._currentBuilder.mul(v1, v2)
+				r = self._currentBuilder.mul(v1.llvmValue, v2.llvmValue)
+				return ESValue(r, v1.typename)
 			elif nodeType == '**':
 				# FIXME we are using the floating point power instead of an integer calculation
 				powiFunc = Function.intrinsic(self._module, INTR_POWI, [Type.double()])
 
+				# FIXME FIXME FIXME FIXME FIXME
 				# convert first argument to double
-				v1 = self._currentBuilder.sitofp(v1, Type.double())
+				b = self._currentBuilder.sitofp(v1.llvmValue, Type.double())
+				if v2.typename != 'int32':
+					e = self._convertType(v2, u'int32').llvmValue
+				else:
+					e = v2.llvmValue
+
 				
-				r = self._currentBuilder.call(powiFunc, [v1, v2])
-				return self._currentBuilder.fptosi(r, Type.int(32))
+				r = self._currentBuilder.call(powiFunc, [b, e])
+				return ESValue(self._currentBuilder.fptosi(r, Type.int(32)), u'int32') # FIXME choose better types
 			elif nodeType == '//':# integer division
-				return self._currentBuilder.sdiv(v1, v2)
+				r = self._currentBuilder.sdiv(v1.llvmValue, v2.llvmValue)
+				return ESValue(r, v1.typename)
 			elif nodeType == '/':# floating point division
-				return self._currentBuilder.sdiv(v1, v2) # FIXME use FP div if result is not an integer
+				# FIXME use FP div if result is not an integer
+				r = self._currentBuilder.sdiv(v1.llvmValue, v2.llvmValue)
+				return ESValue(r, v1.typename)
 			elif nodeType == '%':
-				return self._currentBuilder.srem(v1, v2)
+				r = self._currentBuilder.srem(v1.llvmValue, v2.llvmValue)
+				return ESValue(r, v1.typename)
 			elif nodeType == '+':
-				return self._currentBuilder.add(v1, v2)
+				r = self._currentBuilder.add(v1.llvmValue, v2.llvmValue)
+				return ESValue(r, v1.typename)
 			elif nodeType == '-':
-				return self._currentBuilder.sub(v1, v2)
+				r = self._currentBuilder.sub(v1.llvmValue, v2.llvmValue)
+				return ESValue(r, v1.typename)
 			elif nodeType in 'and xor or'.split():
 				# TODO implement short circuiting!
 
 				# first convert parameters to booleans
-				if v1.type != Type.int(1):
-					v1 = self._currentBuilder.icmp(IPRED_NE, v1, Constant.int(v1.type, 0))
-				if v2.type != Type.int(1):
-					v2 = self._currentBuilder.icmp(IPRED_NE, v2, Constant.int(v2.type, 0))
+				# TODO we should probably use typename and a check against bool
+				if v1.llvmType != Type.int(1):
+					b1 = self._currentBuilder.icmp(IPRED_NE, v1.llvmValue, Constant.int(v1.llvmType, 0))
+				else:
+					b1 = v1.llvmValue
+				if v2.llvmType != Type.int(1):
+					b2 = self._currentBuilder.icmp(IPRED_NE, v2.llvmValue, Constant.int(v2.llvmType, 0))
+				else:
+					b2 = v2.llvmValue
 				
 				# do check
 				if nodeType == 'and':
-					r = self._currentBuilder.and_(v1, v2)
+					r = self._currentBuilder.and_(b1, b2)
 				elif nodeType == 'xor':
-					r = self._currentBuilder.xor(v1, v2)
+					r = self._currentBuilder.xor(b1, b2)
 				elif nodeType == 'or':
-					r = self._currentBuilder.or_(v1, v2)
+					r = self._currentBuilder.or_(b1, b2)
 				else:
 					assert(0 and 'dead code path')
 
 				# and go back to int32
-				return self._currentBuilder.zext(r, Type.int(32))
+				r = self._currentBuilder.zext(r, Type.int(32)) # FIXME remove!
+				return ESValue(r, u'int32')
 			elif nodeType in '< <= == != >= >'.split():
 				m = {}
 				m['<'] = IPRED_SLT
@@ -1002,8 +1082,9 @@ class ModuleTranslator(object):
 				m['>='] = IPRED_SGE
 				m['>'] = IPRED_SGT
 				pred = m[nodeType]
+				assert(v1.llvmType == v2.llvmType and 'types did not match in comp op')
 
-				return self._currentBuilder.icmp(pred, v1, v2)
+				return ESValue(self._currentBuilder.icmp(pred, v1.llvmValue, v2.llvmValue), u'bool')
 			else:
 				assert(0 and 'should never get here')
 		elif tree.getChildCount() == 1 and nodeType in '''- + not'''.split():
@@ -1012,69 +1093,56 @@ class ModuleTranslator(object):
 			if nodeType == '+':
 				return v1
 			elif nodeType == '-':
-				type_ = Type.int(32)
-				return self._currentBuilder.sub(Constant.int(type_, 0), v1)
+				if v1.llvmType.kind == TYPE_INTEGER:
+					r = self._currentBuilder.sub(Constant.int(v1.llvmType, 0), v1.llvmValue)
+					return ESValue(r, v1.typename)
+				else:
+					raise NotImplementedError()
 			elif nodeType == 'not':
-				r = self._currentBuilder.icmp(IPRED_EQ, v1, Constant.int(v1.type, 0))
+				r = self._currentBuilder.icmp(IPRED_EQ, v1.llvmValue, Constant.int(v1.llvmType, 0))
 
-				return self._currentBuilder.zext(r, Type.int(32))
+				return ESValue(self._currentBuilder.zext(r, Type.int(32)), u'int32') # FIXME use bool
 			else:
 				assert(0 and 'dead code path')
 		else:
 			raise NotImplementedError('basic operator \'%s\' not yet implemented' % nodeType)
 
 	def _simpleAssignment(self, name, value, treeForErrorReporting=None):
-		ref = self._scopeStack.find(name)
-		if ref:
-			# variable already exists / there is a function with this name
-
-			if type(ref) == list:
-				s1 = 'can not assign to function name'
+		var = self._scopeStack.find(name)
+		if var:
+			# something with this name exists -> check type
+			if not isinstance(var, ESVariable):
+				s1 = 'not a variable'
 				self._raiseException(RecoverableCompileError, tree=treeForErrorReporting, inlineText=s1)
 
 			# check type
-			if value.type != ref.type.pointee:
-				s1 = 'expression is of incompatible type'
-				s2 = 'lhs type: %s; rhs type: %s' % (ref.type.pointee, value.type)
-				self._raiseException(RecoverableCompileError, tree=treeForErrorReporting, inlineText=s1, postText=s2)
-			self._currentBuilder.store(value, ref)
+			if value.llvmType != var.llvmType.pointee:# FIXME use typename check?
+				value = self._convertType(value, var.typename)
+				#s1 = 'expression is of incompatible type'
+				#s2 = 'lhs type: %s; rhs type: %s' % (var.typename, value.typename)
+				#self._raiseException(RecoverableCompileError, tree=treeForErrorReporting, inlineText=s1, postText=s2)
+			self._currentBuilder.store(value.llvmValue, var.llvmRef)
 		else:
 			# new variable
 			# do not pass value when creating the variable! The value is NOT available in the entry block (at least in general)!
-			self._createAllocaForVar(name, value.type, treeForErrorReporting=treeForErrorReporting)
+			self._createAllocaForVar(name, value.llvmType, value.typename, treeForErrorReporting=treeForErrorReporting)
 
-			ref = self._scopeStack.find(name)
-			self._currentBuilder.store(value, ref)
+			var = self._scopeStack.find(name)
+			assert(isinstance(var, ESVariable))
+			self._currentBuilder.store(value.llvmValue, var.llvmRef)
 		
-		return ref
+		return var
+
 
 	def _onAssign(self, tree):
 		assert(tree.text == '=')
+		assert(tree.getChildCount() == 2) # require desugar
 
-		n = tree.getChildCount()
-		names = []
-		for i in range(n - 1):
-			names.append(tree.getChild(i).text)
+		varName = tree.children[0].text
+		value = self._dispatch(tree.children[1])
 
-		value = self._dispatch(tree.getChild(n - 1))
+		self._simpleAssignment(varName, value, treeForErrorReporting=tree.children[1])
 
-		# transform assignments in the form
-		#     a = b = c = expr;
-		# to
-		#     c = expr; b = c; a = b;
-		# instead of
-		#     c = expr; b = expr; a = expr;
-		# this form avoids any problems related to already existing variables with different types
-
-		lastResult = value;
-		for i, name in enumerate(names):
-			ref = self._simpleAssignment(name, lastResult, treeForErrorReporting=tree.getChild(i + 1))
-
-			if ref.type != lastResult.type:# when we get different types this gets finally called and must do some conversions
-				lastResult = self._currentBuilder.load(ref)
-
-
-		return lastResult # TODO really needed?
 
 	def _onListAssign(self, tree):
 		assert(tree.text == 'LISTASSIGN')
@@ -1097,17 +1165,17 @@ class ModuleTranslator(object):
 		temps = []
 		for i in range(n):
 			value = self._dispatch(rhs.getChild(i))
-			ref = self._currentBuilder.alloca(value.type, 'listassign_tmp')
-			self._currentBuilder.store(value, ref)
-			temps.append(ref)
+			ref = self._currentBuilder.alloca(value.llvmType, 'listassign_tmp')
+			self._currentBuilder.store(value.llvmValue, ref)
+			temps.append(ESVariable(ref, value.typename, 'listassign_tmp'))
 
 		# copy temp -> destination
 		# this is a simple assignment
 		for i in range(n):
-			value = self._currentBuilder.load(temps[i])
+			value = self._currentBuilder.load(temps[i].llvmRef)
 			destination = lhs.getChild(i).text
 
-			self._simpleAssignment(destination, value)
+			self._simpleAssignment(destination, ESValue(value, temps[i].typename))
 
 
 
@@ -1163,6 +1231,50 @@ class ModuleTranslator(object):
 				assert(0 and 'no global variables supported')
 
 		return d
+
+	def _convertType(self, esValue, toType, warn=True):
+		# TODO refactor code into external functions
+		assert(isinstance(esValue, ESValue))
+		assert(isinstance(toType, unicode))
+
+		t1 = esValue.typename
+		t2 = toType
+
+		if t1.startswith(u'int') and t2.startswith(u'int'):
+			# both are signed integers
+			t1Bits = int(t1[3:])
+			t2Bits = int(t2[3:])
+
+			if t1Bits < t2Bits:
+				r = self._currentBuilder.sext(esValue.llvmValue, ESTypeToLLVM(t2))
+				return ESValue(r, t2)
+			else:
+				# this COULD lose precision
+				# FIXME TODO emit a warning
+				r = self._currentBuilder.trunc(esValue.llvmValue, ESTypeToLLVM(t2))
+				return ESValue(r, t2)
+		else:
+			raise NotImplementedError()
+
+	def _promoteTypes(self, v1, v2):
+		t1 = v1.typename
+		t2 = v2.typename
+
+		assert(t2 != t1)
+
+		if t1.startswith(u'int') and t2.startswith(u'int'):
+			# both are signed integers
+			t1Bits = int(t1[3:])
+			t2Bits = int(t2[3:])
+
+			if t1Bits < t2Bits:
+				c = self._convertType(v1, t2)
+				return (c, v2)
+			else:
+				c = self._convertType(v2, t1)
+				return (v1, c)
+		else:
+			raise NotImplementedError
 
 
 	

@@ -30,6 +30,9 @@
 
 from llvm.core import *
 
+from esfunction import ESFunction
+from esvariable import ESVariable
+
 
 class ScopeStackWithProxy(object):
 	def __init__(self, ss):
@@ -62,7 +65,7 @@ class ScopeStack(object):
 
 
 	def add(self, name, ref):
-		if ref.type.pointee.kind == TYPE_FUNCTION:
+		if not isinstance(ref, ESVariable):# ref.type.pointee.kind == TYPE_FUNCTION:
 			# there may be several functions using the same name
 			# --> function overloading
 
