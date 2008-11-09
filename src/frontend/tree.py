@@ -33,10 +33,21 @@
 class Tree(object):
 	''' internal tree type used for AST storage instead of the antlr tree type '''
 	def __init__(self, text, line=0, charPos=0):
+		if not isinstance(text, unicode):
+			text = unicode(text)# TODO not really optimal...
 		self.text = text
 		self.children = []
 		self.line = line
 		self.charPos = charPos
+
+	def setText(self, text):
+		assert(isinstance(text, unicode))
+		self._text = text
+
+	def getText(self):
+		return self._text
+
+	text = property(getText, setText)
 
 
 	def copy(self, copyChildren):

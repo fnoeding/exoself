@@ -1,4 +1,4 @@
-module tt00
+module t001main
 from .t002_moda import *
 from .t002_modb import *
 

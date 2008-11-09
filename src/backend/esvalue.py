@@ -29,7 +29,6 @@
 #
 
 
-from typesystem import ESType
 
 
 class ESValue(object):

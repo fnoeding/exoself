@@ -29,11 +29,11 @@
 #
 
 
-from typesystem import ESType
 
 
-class ESVariable(ESType):
+class ESVariable(object):
 	def __init__(self, llvmRef, typename, name):
+		assert(isinstance(name, unicode))
 		self.llvmRef = llvmRef
 		self.typename = typename
 		self.name = name

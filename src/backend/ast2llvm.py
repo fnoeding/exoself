@@ -44,6 +44,7 @@ from typesystem import *
 from esfunction import ESFunction
 from esvalue import ESValue
 from esvariable import ESVariable
+from estype import ESType
 
 def _childrenIterator(tree):
 	n = tree.getChildCount()
@@ -155,12 +156,12 @@ class ModuleTranslator(object):
 		parameterTypes.append(Type.pointer(Type.int(8)))
 		functionType = Type.function(retType, parameterTypes)
 		func = self._module.add_function(functionType, 'puts')
-		self._scopeStack.add('puts', func)
+		self._scopeStack.add('puts', ESFunction(func, ESType(u'int32'), [ESType(u'int8 *')])) # FIXME how to represent pointer types?
 
 		# abort
 		functionType = Type.function(Type.void(), [])
 		func = self._module.add_function(functionType, 'abort')
-		self._scopeStack.add('abort', func)
+		self._scopeStack.add('abort', ESFunction(func, ESType(u'void'), []))
 
 
 	def _addHelperFunctionsPostTranslation(self):
@@ -180,12 +181,12 @@ class ModuleTranslator(object):
 
 
 			# incompatible return type?
-			retType = mainFunc.type.pointee.return_type
+			retType = mainFunc.llvmType.pointee.return_type
 			if retType != Type.void() and retType != Type.int(32):
 				self._raiseException(RecoverableCompileError, postText=s)
 
 			# has arguments?
-			if len(mainFunc.args) == 0:
+			if len(mainFunc.llvmFunc.args) == 0:
 				functionType= Type.function(Type.int(32), [])
 				function = self._module.add_function(functionType, 'main')
 
@@ -196,7 +197,7 @@ class ModuleTranslator(object):
 				b.branch(BB)
 
 				b = Builder.new(BB)
-				r = b.call(mainFunc, [])
+				r = b.call(mainFunc.llvmFunc, [])
 
 				if retType != Type.void():
 					b.ret(r)
@@ -224,6 +225,11 @@ class ModuleTranslator(object):
 
 		self._moduleName = os.path.split(self._filename)[1] 
 		self._packageName = ''
+
+		# add some basic types
+		basicTypes = u'void bool int8 int16 int32 int64'.split()
+		for x in basicTypes:
+			self._scopeStack.add(x, ESType(x))
 
 		# first pass: process package and module statements
 		# if these statements exist they are the first two
@@ -359,14 +365,15 @@ class ModuleTranslator(object):
 				mangledName = False
 
 			if not mangledName:
-				func = self._module.add_function(x['type'], x['mangledName'])
-				self._scopeStack.add(x['name'], func)
+				func = self._module.add_function(x['llvmType'].pointee, x['mangledName'])
+				esFunc = ESFunction(func, x['function'].returnType, x['function'].paramTypes)
+				self._scopeStack.add(x['name'], esFunc)
 			else:
 				# check that types match
 				blockers = self._scopeStack.find(x['name']) # FIXME is this really enough? maybe we should scan all functions to get the offending one
 				match = False
 				for b in blockers:
-					if b.type.pointee == x['type']:
+					if b.llvmType == x['llvmType']: # enough? use ESType based checks?
 						match = True
 
 				if not match:
@@ -396,32 +403,28 @@ class ModuleTranslator(object):
 		returnTypeName = ci.next().text
 		argList = ci.next()
 
-		if returnTypeName == 'int32':
-			returnType = Type.int(32)
-		elif returnTypeName == 'void':
-			returnType = Type.void()
-		else:
-			self._raiseException(RecoverableCompileError, tree=tree.getChild(1), inlineText='unknown type')
+		returnType = self._scopeStack.findType(returnTypeName)
+		if not returnType:
+			self._raiseException(RecoverableCompileError, tree=tree.children[2], inlineText='unknown type')
 
 
-		functionParam_ty = []
+		functionParamTypes = []
 		functionParamTypeNames = []
 		functionParamNames = []
 		for i in range(argList.getChildCount() / 2):
 			argName = argList.getChild(i * 2).text
 			argTypeName = argList.getChild(i * 2 + 1).text
 
-			if argTypeName == 'int32':
-				arg_ty = Type.int(32)
-			else:
-				raise NotImplementedError('unsupported type: %s' % typeName)
+			argType = self._scopeStack.findType(argTypeName)
+			if not argType:
+				self._raiseException(RecoverableCompileError, tree=argList.children[2 * i + 1], inlineText='unknown type')
 
-			functionParam_ty.append(arg_ty)
+			functionParamTypes.append(argType)
 			functionParamTypeNames.append(argTypeName)
 			functionParamNames.append(argName)
 
 
-		funcProto = Type.function(returnType, functionParam_ty)
+		funcProto = Type.function(returnType.llvmType, [x.llvmType for x in functionParamTypes])
 
 		# parse modifiers
 		modMangling = 'default'
@@ -449,7 +452,7 @@ class ModuleTranslator(object):
 				# TODO think about limitations of overloading
 
 				# check that a function is not defined several times using the same (returnType, paramterTypes)
-				if other.type.pointee == funcProto:
+				if other.llvmType.pointee == funcProto:# FIXME use ESType based checking?
 					func = other
 					break
 
@@ -474,14 +477,16 @@ class ModuleTranslator(object):
 				self._raiseException(CompileError, tree=tree.getChild(1), inlineText=s1, postText=s2)
 
 
-			func = self._module.add_function(funcProto, mangledName)
+			llvmFunc = self._module.add_function(funcProto, mangledName)
 			
 			for i,x in enumerate(functionParamNames):
-				func.args[i].name = x
+				llvmFunc.args[i].name = x # name is always a str, not a unicode...
 
 			# add function name to scope
+			func = ESFunction(llvmFunc, returnType, functionParamTypes)
 			self._scopeStack.add(name, func)
 
+		assert(isinstance(func, ESFunction))
 		return func
 
 		# add function
@@ -517,16 +522,16 @@ class ModuleTranslator(object):
 		with ScopeStackWithProxy(self._scopeStack):
 
 			self._currentFunction = func
-			entryBB = func.append_basic_block('entry')
+			entryBB = func.llvmFunc.append_basic_block('entry')
 
 			# add variables
-			for i in range(len(func.args)):
-				self._createAllocaForVar(func.args[i].name, func.args[i].type, u'int32', func.args[i], treeForErrorReporting=tree) # FIXME use real argument type
+			for i in range(len(func.llvmFunc.args)):
+				self._createAllocaForVar(unicode(func.llvmFunc.args[i].name), func.llvmFunc.args[i].type, func.paramTypes[i].typename, func.llvmFunc.args[i], treeForErrorReporting=tree)
 
 
 			addedBRToEntryBB = False
 			for x in ci:
-				currentBB = func.append_basic_block('bb')
+				currentBB = func.llvmFunc.append_basic_block('bb')
 				self._currentBuilder = Builder.new(currentBB)
 
 				if not addedBRToEntryBB:
@@ -550,7 +555,7 @@ class ModuleTranslator(object):
 					
 				
 
-			func.verify()
+			func.llvmFunc.verify()
 
 
 	def _onBlock(self, tree):
@@ -567,11 +572,9 @@ class ModuleTranslator(object):
 
 		esValue = self._dispatch(tree.getChild(0))
 
-		expectedRetType = self._currentFunction.type.pointee.return_type
+		expectedRetType = self._currentFunction.llvmType.pointee.return_type
 		if esValue.llvmType != expectedRetType:
-			esValue = self._convertType(esValue, u'int32') # FIXME use real type, not hard coded one
-			#s = 'expected return type: %s' % expectedRetType
-			#self._raiseException(RecoverableCompileError, tree=tree.getChild(0), inlineText='wrong return type', postText=s)
+			esValue = self._convertType(esValue, self._currentFunction.returnType.typename)
 
 		self._currentBuilder.ret(esValue.llvmValue)
 
@@ -591,8 +594,8 @@ class ModuleTranslator(object):
 
 		# now implement an if
 
-		thenBB = self._currentFunction.append_basic_block('assert_true') # trap path
-		elseBB = self._currentFunction.append_basic_block('assert_false') # BasicBlock(None) # TODO check if this is really ok
+		thenBB = self._currentFunction.llvmFunc.append_basic_block('assert_true') # trap path
+		elseBB = self._currentFunction.llvmFunc.append_basic_block('assert_false') # BasicBlock(None) # TODO check if this is really ok
 
 		self._currentBuilder.cbranch(cond, thenBB, elseBB)
 
@@ -634,7 +637,7 @@ class ModuleTranslator(object):
 		# children: expr block (expr block)* block?
 		#           if         else if       else
 		
-		mergeBB = self._currentFunction.append_basic_block('if_merge')
+		mergeBB = self._currentFunction.llvmFunc.append_basic_block('if_merge')
 		# iterate over all 'if' and 'else if' blocks
 		for i in range(tree.getChildCount() // 2):
 			condESValue = self._dispatch(tree.getChild(2 * i))
@@ -645,8 +648,8 @@ class ModuleTranslator(object):
 
 			
 	
-			thenBB = self._currentFunction.append_basic_block('if_then')
-			elseBB = self._currentFunction.append_basic_block('if_else')
+			thenBB = self._currentFunction.llvmFunc.append_basic_block('if_then')
+			elseBB = self._currentFunction.llvmFunc.append_basic_block('if_else')
 
 			self._currentBuilder.cbranch(cond, thenBB, elseBB)
 
@@ -717,13 +720,13 @@ class ModuleTranslator(object):
 			self._currentBuilder.store(start.llvmValue, inductVar.llvmRef)
 
 			# create blocks
-			headBB = self._currentFunction.append_basic_block('head') # decide between Up and Down
-			headDownBB = self._currentFunction.append_basic_block('headDown')
-			headUpBB = self._currentFunction.append_basic_block('headUp')
-			bodyBB = self._currentFunction.append_basic_block('body')
-			stepBB = self._currentFunction.append_basic_block('step')
+			headBB = self._currentFunction.llvmFunc.append_basic_block('head') # decide between Up and Down
+			headDownBB = self._currentFunction.llvmFunc.append_basic_block('headDown')
+			headUpBB = self._currentFunction.llvmFunc.append_basic_block('headUp')
+			bodyBB = self._currentFunction.llvmFunc.append_basic_block('body')
+			stepBB = self._currentFunction.llvmFunc.append_basic_block('step')
 			# TODO: think about implementing an 'else' block, that gets called when the loop does not get executed
-			mergeBB = self._currentFunction.append_basic_block('merge')
+			mergeBB = self._currentFunction.llvmFunc.append_basic_block('merge')
 
 			self._currentBuilder.branch(headBB)
 
@@ -771,10 +774,10 @@ class ModuleTranslator(object):
 
 		with ScopeStackWithProxy(self._scopeStack):
 			# create blocks
-			headBB = self._currentFunction.append_basic_block('head')
-			bodyBB = self._currentFunction.append_basic_block('body')
+			headBB = self._currentFunction.llvmFunc.append_basic_block('head')
+			bodyBB = self._currentFunction.llvmFunc.append_basic_block('body')
 			# TODO think about an else block which gets executed iff the body is not executed at least once
-			mergeBB = self._currentFunction.append_basic_block('merge')
+			mergeBB = self._currentFunction.llvmFunc.append_basic_block('merge')
 
 			# branch to headBB / enter loop
 			self._currentBuilder.branch(headBB)
@@ -907,7 +910,7 @@ class ModuleTranslator(object):
 		# important: the mem2reg pass is limited to analyzing the entry block of functions,
 		# so all variables must be defined there
 
-		entryBB = self._currentFunction.get_entry_basic_block()
+		entryBB = self._currentFunction.llvmFunc.get_entry_basic_block()
 		entryBuilder = Builder.new(entryBB)
 		# workaround: llvm-py segfaults when we call position_at_beginning on an empty block
 		if entryBB.instructions:
@@ -956,10 +959,10 @@ class ModuleTranslator(object):
 			self._raiseException(RecoverableCompileError, tree=tree.getChild(0), inlineText='undefined function')
 
 		# select depending on number of arguments, ignoring anything else for now
-		# FIXME
+		# FIXME use ESType based checking?
 		function = None
 		for f in functions:
-			if len(f.args) == nArguments:
+			if len(f.llvmFunc.args) == nArguments:
 				function = f
 				break
 
@@ -967,7 +970,7 @@ class ModuleTranslator(object):
 			s1 = 'no matching function found'
 			s2 = ['canditates:']
 			for f in functions:
-				s2.append('\t%s' % f.type.pointee)
+				s2.append('\t%s' % f.llvmFunc.type.pointee)
 			s2 = '\n'.join(s2)
 			self._raiseException(RecoverableCompileError, tree=tree.getChild(0), inlineText=s1, postText=s2)
 
@@ -979,22 +982,22 @@ class ModuleTranslator(object):
 
 		# check arguments
 		# TODO check against ES types!
-		if len(params) != len(function.args):
+		if len(params) != len(function.llvmFunc.args):
 			s = 'function type: %s' % function.type.pointee
 			self._raiseException(RecoverableCompileError, tree=tree.getChild(0), inlineText='wrong number of arguments', postText=s)
 
-		for i in range(len(function.args)):
-			if function.args[i].type != params[i].llvmType:
+		for i in range(len(function.llvmFunc.args)):
+			if function.llvmFunc.args[i].type != params[i].llvmType: # FIXME use ESType based checking
 				# try implicit conversion
 				try:
-					params[i] = self._convertType(params[i], u'int32') # FIXME use real type
+					params[i] = self._convertType(params[i], function.paramTypes[i])
 				except CompileError, NotImplementedError:
 					s = 'argument %d type: %s' % (i + 1, function.args[i].type)
 					s2 = 'wrong argument type: %s' % params[i].type
 					self._raiseException(RecoverableCompileError, tree=tree.getChild(i + 1), inlineText=s2, postText=s)
 
-		r = self._currentBuilder.call(function, [x.llvmValue for x in params], 'ret_%s' % callee)
-		return ESValue(r, u'int32') # FIXME
+		r = self._currentBuilder.call(function.llvmFunc, [x.llvmValue for x in params], 'ret_%s' % callee)
+		return ESValue(r, function.returnType.typename)
 
 	def _onBasicOperator(self, tree):
 		nodeType = tree.text
@@ -1165,9 +1168,9 @@ class ModuleTranslator(object):
 		temps = []
 		for i in range(n):
 			value = self._dispatch(rhs.getChild(i))
-			ref = self._currentBuilder.alloca(value.llvmType, 'listassign_tmp')
+			ref = self._currentBuilder.alloca(value.llvmType, u'listassign_tmp')
 			self._currentBuilder.store(value.llvmValue, ref)
-			temps.append(ESVariable(ref, value.typename, 'listassign_tmp'))
+			temps.append(ESVariable(ref, value.typename, u'listassign_tmp'))
 
 		# copy temp -> destination
 		# this is a simple assignment
@@ -1208,6 +1211,8 @@ class ModuleTranslator(object):
 	def _exportGloballyVisibleSymbols(self):
 		assert(self._module and 'run translateAST first')
 
+		# TODO refactor to avoid accessing details of ScopeStack
+
 		# globally visible symbols
 		d = {}
 		d['package'] = self._packageName
@@ -1216,26 +1221,24 @@ class ModuleTranslator(object):
 		functions = []
 		d['functions'] = functions
 
-		for key, value in self._scopeStack._stack[0].items():
-			if type(value) == list:
-				# function
-				for x in value:
-					f = {}
-					f['name'] = key
-					f['mangledName'] = x.name
-					f['type'] = x.type.pointee
+		for key, value in self._scopeStack._stack[0]._functions.items():
+			for x in value:
+				f = {}
+				f['name'] = key
+				f['mangledName'] = x.llvmFunc.name # use direct name
+				f['function'] = x # FIXME use a copy here
+				f['llvmType'] = x.llvmType
 
-					functions.append(f)
-			else:
-				# global variable
-				assert(0 and 'no global variables supported')
+				functions.append(f)
 
 		return d
 
 	def _convertType(self, esValue, toType, warn=True):
 		# TODO refactor code into external functions
 		assert(isinstance(esValue, ESValue))
-		assert(isinstance(toType, unicode))
+		if isinstance(toType, ESType):# FIXME toType should always be ESType
+			toType = toType.typename
+		assert(isinstance(toType, unicode))# FIXME toType should never be a string
 
 		t1 = esValue.typename
 		t2 = toType

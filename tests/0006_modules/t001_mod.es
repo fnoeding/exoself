@@ -1,4 +1,4 @@
-module tt00
+module t001mod
 
 def(mangling=C) f() as int32
 {

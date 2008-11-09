@@ -1,4 +1,4 @@
-module tt00
+module t003
 
 def f() as int32
 {

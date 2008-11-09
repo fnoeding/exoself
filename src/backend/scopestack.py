@@ -28,10 +28,11 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-from llvm.core import *
 
 from esfunction import ESFunction
 from esvariable import ESVariable
+from estype import ESType
+
 
 
 class ScopeStackWithProxy(object):
@@ -45,10 +46,63 @@ class ScopeStackWithProxy(object):
 		self._ss.popScope()
 
 
+class _ScopeStackEntries(object):
+	def __init__(self):
+		self._functions = {}
+		self._variables = {}
+		self._types = {}
+
+
+	def add(self, name, x):
+		r = self.find(name)
+
+		if isinstance(x, ESVariable):
+			assert(not r)
+			self._variables[name] = x
+		elif isinstance(x, ESType):
+			assert(not r)
+			self._types[name] = x
+		elif isinstance(x, ESFunction):
+			assert(r is None or isinstance(r, list))
+
+			if r:
+				self._functions[name].append(x)
+			else:
+				self._functions[name] = [x]
+		else:
+			assert(0 and 'dead code path')
+
+
+	def find(self, name):
+		if name in self._variables:
+			return self._variables[name]
+
+		if name in self._functions:
+			r = self._functions[name]
+			if not r:
+				return None
+			return r
+
+		if name in self._types:
+			return self._types[name]
+
+
+		return None
+
+
+	def findType(self, name):
+		if name in self._types:
+			return self._types[name]
+
+		return None
+
+
+
+
 
 class ScopeStack(object):
 	def __init__(self):
-		self._stack = {0: {}}
+		self._stack = {0: _ScopeStackEntries()}
 		self._currentLevel = 0
 
 
@@ -61,52 +115,40 @@ class ScopeStack(object):
 
 	def pushScope(self):
 		self._currentLevel += 1
-		self._stack[self._currentLevel] = {}
+		self._stack[self._currentLevel] = _ScopeStackEntries()
 
 
 	def add(self, name, ref):
-		if not isinstance(ref, ESVariable):# ref.type.pointee.kind == TYPE_FUNCTION:
-			# there may be several functions using the same name
-			# --> function overloading
-
-			# check that there is no variable shadowing that would shadow this function
-			r = self.find(name)
-			if not r:
-				self._stack[self._currentLevel][name] = [ref]
-			else:
-				assert(type(r) == list and 'trying to shadow a variable with a function name')
-
-				# do NOT use r to append!
-				if name in self._stack[self._currentLevel]:
-					self._stack[self._currentLevel][name].append(ref)
-				else:
-					self._stack[self._currentLevel][name] = [ref]
+		r = self.find(name)
+		if r and isinstance(r, list):
+			assert(isinstance(ref, ESFunction))
+			self._stack[self._currentLevel].add(name, ref)
 		else:
-			assert(not self.find(name))
-
-			self._stack[self._currentLevel][name] = ref
+			assert(not r)
+			self._stack[self._currentLevel].add(name, ref)
 
 
 	def find(self, name):
 		results = []
-
-		for x in range(self._currentLevel, -1, -1):
-			m = self._stack[x]
-
-			try:
-				v = m[name]
-			except:
+		for i in range(self._currentLevel, -1, -1):
+			r = self._stack[i].find(name)
+			if not r:
 				continue
 
-			if type(v) == list:
-				# function
-				results.extend(v)
+			if isinstance(r, list):
+				results.extend(r)
 			else:
-				return v
+				return r
+
+		return results
 
 
-		if results:
-			return results
-		else:
-			return None
+	def findType(self, name):
+		for i in range(self._currentLevel, -1, -1):
+			r = self._stack[i].findType(name)
+			if r:
+				return r
+
+		return None
+
 

@@ -1,4 +1,4 @@
-module tt00
+module t004modb
 
 
 def f() as int32

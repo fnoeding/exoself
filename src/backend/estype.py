@@ -29,25 +29,21 @@
 #
 
 
-from estype import ESType
+from llvm.core import *
+import typesystem
 
 
-class ESFunction(object):
-	def __init__(self, llvmFunc, returnType, paramTypes):
-		# TODO add function name
-		# TODO add paramater names
-		assert(isinstance(returnType, ESType))
-		for x in paramTypes:
-			assert(isinstance(x, ESType))
+class ESType(object):
+	def __init__(self, typename):
+		assert(isinstance(typename, unicode))
 
-		self.llvmFunc = llvmFunc
-		self.returnType = returnType
-		self.paramTypes = paramTypes
+		self.typename = typename
 
-	
+
 	def getLLVMType(self):
-		return self.llvmFunc.type
+		return typesystem.ESTypeToLLVM(self.typename)
 
 	llvmType = property(getLLVMType)
+
 
 

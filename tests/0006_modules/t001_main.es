@@ -1,4 +1,4 @@
-module tt00
+module t001main
 
 # use explicit declaration
 

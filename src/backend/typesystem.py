@@ -38,6 +38,7 @@ for i in [8, 16, 32, 64, 128, 256, 512, 1024]:
 	_typeMap[u'int%d' % i] = Type.int(i)
 	_typeMap[u'uint%d' % i] = Type.int(i)
 _typeMap[u'bool'] = Type.int(1)
+_typeMap[u'void'] = Type.void()
 
 
 def ESTypeToLLVM(typename):
@@ -45,9 +46,6 @@ def ESTypeToLLVM(typename):
 
 	return _typeMap[typename]
 
-
-class ESType(object):
-	pass
 
 
 

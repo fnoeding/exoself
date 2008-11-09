@@ -67,7 +67,7 @@ def _fixPackageAndModuleNames(tree):
 	if tree.text == u'package' or tree.text == u'IMPORTALL':
 		newText = [x.text for x in tree.children]
 		del tree.children[1:]
-		tree.children[0].text = ''.join(newText)
+		tree.children[0].text = u''.join(newText)
 
 
 def _desugarMultiAssign(tree):
@@ -103,7 +103,7 @@ def _desugarMultiAssign(tree):
 
 			for j in range(nNames - 2, -1, -1):# start with assignment on the right side working towards the left side
 				variableNode = c.copy(False)
-				variableNode.text = 'VARIABLE'
+				variableNode.text = u'VARIABLE'
 				variableNode.children = [nameNodes[j + 1].copy(True)]
 
 				node = c.copy(False)

@@ -30,7 +30,10 @@
 
 _typeNamesMangled = {}
 _typeNamesMangled['bool'] = 'b'
+_typeNamesMangled['int8'] = 'c'
+_typeNamesMangled['int16'] = 's'
 _typeNamesMangled['int32'] = 'i'
+_typeNamesMangled['int64'] = 'l'
 _typeNamesMangled['void'] = 'v'
 
 
