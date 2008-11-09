@@ -33,24 +33,38 @@
 import os
 import sys
 from optparse import OptionParser
+import subprocess
 
 options = None
 args = None
 
 
-def runExoself(filebase, opts, quiet=False):
+def runExoself(filebase, opts, quiet=False, expectCompileError=False):
 	postFix = ''
 	if quiet:
 		postFix = ' 1> /dev/null 2> /dev/null'
 
-	exitStatus = os.system('../src/exoself --save-temps %s %s.es %s' % (opts, filebase, postFix))
-	if os.WEXITSTATUS(exitStatus) != 0:
-		if not quiet:
-			print 'compilation failed'
+	cmd = '../src/exoself --save-temps %s %s.es %s' % (opts, filebase, postFix)
+	p = subprocess.Popen(cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+	d = p.stdout.read().strip()
+	d2 = p.stderr.read().strip()
+	p.wait()
+	if d.endswith('aborting'):
+		if expectCompileError:
+			return True
+		return False
+
+	if expectCompileError:
+		# got not expected error
+		print 'stdout', d
+		print 'stderr:', d2
+		return False
+
+	if p.returncode != 0:
 		return False
 
 	return True
-
+	
 
 
 def runTest(filebase):
@@ -58,8 +72,7 @@ def runTest(filebase):
 
 	# special case: compilation MUST fail
 	if os.path.exists('%s.compileerror' % filebase):
-		r = runExoself(filebase, '-c', True)
-		return not r
+		return runExoself(filebase, '-c', quiet=False, expectCompileError=True)
 
 	if not runExoself(filebase, '-c'): # generate bitcode
 		return False

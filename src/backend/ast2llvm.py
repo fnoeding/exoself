@@ -156,7 +156,7 @@ class ModuleTranslator(object):
 		parameterTypes.append(Type.pointer(Type.int(8)))
 		functionType = Type.function(retType, parameterTypes)
 		func = self._module.add_function(functionType, 'puts')
-		self._scopeStack.add('puts', ESFunction(func, ESType(u'int32'), [ESType(u'int8 *')])) # FIXME how to represent pointer types?
+		self._scopeStack.add('puts', ESFunction(func, ESType(u'int32'), [ESType(u'pointer(int8)')])) # FIXME how to represent pointer types?
 
 		# abort
 		functionType = Type.function(Type.void(), [])
@@ -569,6 +569,10 @@ class ModuleTranslator(object):
 
 	def _onReturn(self, tree):
 		assert(tree.text == 'return')
+
+		if self._currentFunction.returnType.typename == u'void':
+			if tree.getChildCount() != 0:
+				self._raiseException(RecoverableCompileError, tree=tree.children[0], inlineText='this function has no return value')
 
 		esValue = self._dispatch(tree.getChild(0))
 
@@ -992,8 +996,8 @@ class ModuleTranslator(object):
 				try:
 					params[i] = self._convertType(params[i], function.paramTypes[i])
 				except CompileError, NotImplementedError:
-					s = 'argument %d type: %s' % (i + 1, function.args[i].type)
-					s2 = 'wrong argument type: %s' % params[i].type
+					s = 'argument %d type: %s' % (i + 1, function.llvmFunc.args[i].type)
+					s2 = 'wrong argument type: %s' % params[i].llvmType
 					self._raiseException(RecoverableCompileError, tree=tree.getChild(i + 1), inlineText=s2, postText=s)
 
 		r = self._currentBuilder.call(function.llvmFunc, [x.llvmValue for x in params], 'ret_%s' % callee)
@@ -1257,7 +1261,7 @@ class ModuleTranslator(object):
 				r = self._currentBuilder.trunc(esValue.llvmValue, ESTypeToLLVM(t2))
 				return ESValue(r, t2)
 		else:
-			raise NotImplementedError()
+			self._raiseException(RecoverableCompileError, postText='conversion between %s and %s is not yet supported' % (t1, t2))
 
 	def _promoteTypes(self, v1, v2):
 		t1 = v1.typename
@@ -1277,7 +1281,7 @@ class ModuleTranslator(object):
 				c = self._convertType(v2, t1)
 				return (v1, c)
 		else:
-			raise NotImplementedError
+			self._raiseException(RecoverableCompileError, postText='conversion between %s and %s is not yet supported' % (t1, t2))
 
 
 	
