@@ -37,9 +37,20 @@ class ESType(object):
 		# break structural equivalence
 		return ESType([self], ('typedef', name))
 
+
 	@staticmethod
 	def createStruct(name, parts):
 		return ESType(parts, ('struct', name))
+
+
+	@staticmethod
+	def createFunction(name, returnTypes, paramTypes):
+		assert(len(returnTypes) >= 1)
+		parts = []
+		parts.extend(returnTypes)
+		parts.extend(paramTypes)
+		return ESType(parts, ('function', (name, (len(returnTypes)))))
+
 
 	
 	def __str__(self):
@@ -78,12 +89,29 @@ class ESType(object):
 
 	def toLLVMType(self):
 		if len(self.parents) > 1:
-			assert(self.payload[0] == 'struct')
+			assert(self.payload[0] in ['struct', 'function'])
 		if not self.parents:
 			assert(self.payload[0] == 'elementary')
 
 		if self.payload[0] == 'struct':
-			raise NotImplementedError()
+			llvmTypes = []
+			for p in self.parents:
+				llvmTypes.append(p.toLLVMType())
+			return Type.struct(llvmTypes)
+		elif self.payload[0] == 'function':
+			llvmTypes = []
+			for p in self.parents:
+				llvmTypes.append(p.toLLVMType())
+
+			nRets = self.payload[1][1]
+			rets = llvmTypes[:nRets]
+			params = llvmTypes[nRets:]
+
+			if nRets == 1:
+				return Type.function(rets[0], params)
+			else:
+				# does not work in LLVM 2.3
+				return Type.function(rets, params)
 		elif self.payload[0] == 'elementary':
 			t = self.payload[1]
 			if t == 'int8':
@@ -234,13 +262,23 @@ def main():
 	# now create a structure
 	i64i32 = ESType.createStruct('pkg_mod_i64i32', [ts.find('int64'), ts.find('int32')]) # struct {x as int64; y as int32}
 	ts.addType(i64i32, 'i64i32')
-	print ts.find('i64i32')
+	print i64i32, '-->', i64i32.toLLVMType()
 
 	p6432 = ESType.createStruct('pkg_mod_p6432', [ts.find('int64'), ts.find('int32')]) # struct {x as int64; y as int32}
 	ts.addType(p6432, 'p6432')
-	print ts.find('p6432')
+	print p6432, '-->', p6432.toLLVMType()
 
 	assert(ts.find('p6432') != ts.find('i64i32'))
+
+
+	# define a *recursive* structure
+	# TODO
+
+
+	# create a function
+	fi_bi = ESType.createFunction('mod_pkg_fi_bi', [ts.find('int')], [ts.find('byte'), ts.find('int')])
+	ts.addType(fi_bi, 'fi_bi')
+	print fi_bi, '-->', fi_bi.toLLVMType()
 
 
 
