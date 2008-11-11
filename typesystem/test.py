@@ -47,12 +47,12 @@ class ESType(object):
 
 
 	@staticmethod
-	def createFunction(name, returnTypes, paramTypes):
+	def createFunction(returnTypes, paramTypes):
 		assert(len(returnTypes) >= 1)
 		parts = []
 		parts.extend(returnTypes)
 		parts.extend(paramTypes)
-		return ESType(parts, ('function', (name, (len(returnTypes)))))
+		return ESType(parts, ('function', len(returnTypes)))
 
 	@staticmethod
 	def createSelfPointer():
@@ -100,15 +100,32 @@ class ESType(object):
 			return '%s { %s }' % (self.payload, ', '.join(s))
 
 
-	def __eq__(self, other):
-		if self.payload != other.payload:
+	def isEquivalentTo(self, other, structural):
+		# structural equivalence: Skip any typedefs and ignore different struct names
+
+		t1 = self
+		t2 = other
+
+		if structural:
+			while t1.payload[0] == 'typedef':
+				assert(len(t1.parents) == 1)
+				t1 = t1.parents[0]
+
+			while t2.payload[0] == 'typedef':
+				assert(len(t2.parents) == 1)
+				t2 = t2.parents[0]
+
+
+		if structural and t1.payload[0] == 'struct' and t2.payload[0] == 'struct':
+			pass
+		elif t1.payload != t2.payload:
 			return False
 
-		if len(self.parents) != len(other.parents):
+		if len(t1.parents) != len(t2.parents):
 			return False
 
-		for i in range(len(self.parents)):
-			if self.parents[i] != other.parents[i]:
+		for i in range(len(t1.parents)):
+			if not t1.parents[i].isEquivalentTo(t2.parents[i], structural):
 				return False
 
 
@@ -116,8 +133,13 @@ class ESType(object):
 
 
 
+	def __eq__(self, other):
+		raise NotImplementedError('use isEquivalentTo')
+
+
+
 	def __ne__(self, other):
-		return not self.__eq__(other)
+		raise NotImplementedError('use isEquivalentTo')
 
 
 
@@ -152,7 +174,7 @@ class ESType(object):
 			for p in self.parents:
 				llvmTypes.append(p.toLLVMType())
 
-			nRets = self.payload[1][1]
+			nRets = self.payload[1]
 			rets = llvmTypes[:nRets]
 			params = llvmTypes[nRets:]
 
@@ -300,11 +322,14 @@ def main():
 
 
 	# do some tests
-	assert(ts.find('int8') != ts.find('byte'))
-	assert(ts.find('int32') == ts.find('int'))
-	assert(ts.find('int64') == ts.find('long'))
-	assert(ts.find('int64').derivePointer() == ts.find('int64ptr'))
-	assert(ts.find('void').derivePointer() != ts.find('restrictedPointer'))
+	assert(not ts.find('int8').isEquivalentTo(ts.find('byte'), False))
+	assert(ts.find('int8').isEquivalentTo(ts.find('byte'), True))
+	assert(ts.find('int32').isEquivalentTo(ts.find('int'), False))
+	assert(ts.find('int32').isEquivalentTo(ts.find('int'), True))
+	assert(ts.find('int64').isEquivalentTo(ts.find('long'), False))
+	assert(ts.find('int64').isEquivalentTo(ts.find('long'), True))
+	assert(ts.find('int64').derivePointer().isEquivalentTo(ts.find('int64ptr'), False))
+	assert(not ts.find('void').derivePointer().isEquivalentTo(ts.find('restrictedPointer'), False))
 
 
 
@@ -317,7 +342,8 @@ def main():
 	ts.addType(p6432, 'p6432')
 	print p6432, '-->', p6432.toLLVMType()
 
-	assert(ts.find('p6432') != ts.find('i64i32'))
+	assert(not ts.find('p6432').isEquivalentTo(ts.find('i64i32'), False))
+	assert(ts.find('p6432').isEquivalentTo(ts.find('i64i32'), True))
 
 
 	# define a *recursive* structure
@@ -327,9 +353,15 @@ def main():
 
 
 	# create a function
-	fi_bi = ESType.createFunction('mod_pkg_fi_bi', [ts.find('int')], [ts.find('byte'), ts.find('int')])
+	fi_bi = ESType.createFunction([ts.find('int')], [ts.find('byte'), ts.find('int')])
 	ts.addType(fi_bi, 'fi_bi')
 	print fi_bi, '-->', fi_bi.toLLVMType()
+
+	fi_ci = ESType.createFunction([ts.find('int32')], [ts.find('int8'), ts.find('int32')])
+	ts.addType(fi_ci, 'fi_ci')
+	print fi_ci, '-->', fi_ci.toLLVMType()
+	assert(not fi_ci.isEquivalentTo(fi_bi, False))
+	assert(fi_ci.isEquivalentTo(fi_bi, True))
 
 
 	# const / invariant tests
