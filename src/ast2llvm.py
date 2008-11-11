@@ -46,6 +46,7 @@ from esvalue import ESValue
 from esvariable import ESVariable
 from estype import ESType
 from errors import *
+import astwalker
 
 def _childrenIterator(tree):
 	n = tree.getChildCount()
@@ -57,88 +58,7 @@ def _childrenIterator(tree):
 
 
 
-class ModuleTranslator(object):
-	def __init__(self):
-		self._dispatchTable = {}
-		self._dispatchTable['MODULESTART'] = self._onModuleStart
-		self._dispatchTable['package'] = self._onPackage
-		self._dispatchTable['module'] = self._onModule
-		self._dispatchTable['IMPORTALL'] = self._onImportAll
-		self._dispatchTable['DEFFUNC'] = self._onDefFunction
-		self._dispatchTable['BLOCK'] = self._onBlock
-		self._dispatchTable['pass'] = self._onPass
-		self._dispatchTable['return'] = self._onReturn
-		self._dispatchTable['assert'] = self._onAssert
-		self._dispatchTable['if'] = self._onIf
-		self._dispatchTable['for'] = self._onFor
-		self._dispatchTable['while'] = self._onWhile
-		self._dispatchTable['break'] = self._onBreak
-		self._dispatchTable['continue'] = self._onContinue
-		self._dispatchTable['INTEGER_CONSTANT'] = self._onIntegerConstant
-		self._dispatchTable['FLOAT_CONSTANT'] = self._onFloatConstant
-		self._dispatchTable['CALLFUNC'] = self._onCallFunc
-		self._dispatchTable['VARIABLE'] = self._onVariable
-		self._dispatchTable['DEFVAR'] = self._onDefVariable
-		self._dispatchTable['+'] = self._onBasicOperator
-		self._dispatchTable['-'] = self._onBasicOperator
-		self._dispatchTable['*'] = self._onBasicOperator
-		self._dispatchTable['**'] = self._onBasicOperator
-		self._dispatchTable['/'] = self._onBasicOperator
-		self._dispatchTable['//'] = self._onBasicOperator
-		self._dispatchTable['%'] = self._onBasicOperator
-		self._dispatchTable['not'] = self._onBasicOperator
-		self._dispatchTable['and'] = self._onBasicOperator
-		self._dispatchTable['or'] = self._onBasicOperator
-		self._dispatchTable['xor'] = self._onBasicOperator
-		self._dispatchTable['<'] = self._onBasicOperator
-		self._dispatchTable['<='] = self._onBasicOperator
-		self._dispatchTable['=='] = self._onBasicOperator
-		self._dispatchTable['!='] = self._onBasicOperator
-		self._dispatchTable['>='] = self._onBasicOperator
-		self._dispatchTable['>'] = self._onBasicOperator
-		self._dispatchTable['='] = self._onAssign
-		self._dispatchTable['LISTASSIGN'] = self._onListAssign
-
-	def _generateContext(self, preText, postText, inlineText='', lineBase1=0, charBase1=0, numBefore=5, numAfter=0):
-		if not self._sourcecodeLines or not lineBase1:
-			s = []
-			if preText:
-				s.append(preText)
-			if inlineText:
-				s.append(inlineText)
-			s.append(postText)
-			print s
-			return '\n\t'.join(s) + '\n'
-
-
-		s = []
-		if preText:
-			s.append(preText)
-
-		start = max(lineBase1 - 1 - 5, 0)
-		stop = min(lineBase1 - 1 + 1 + numAfter, len(self._sourcecodeLines))
-		for i in range(start, stop):
-			s.append('% 5d: %s' % (i + 1, self._sourcecodeLines[i]))
-			if i == stop - 1:
-				x = (' ' * (7 + charBase1))
-				x += '^--- %s' % inlineText
-				s.append(x)
-		if postText:
-			s.append(postText)
-
-
-		return '\n'.join(s) + '\n'
-
-	def _raiseException(self, exType, line=None, tree=None, numContextLines=5, preText='error:', postText='', inlineText=''):
-		if line:
-			s = self._generateContext(lineBase1=line, preText=preText, postText=postText, inlineText=inlineText)
-		elif tree and tree.line:
-			s = self._generateContext(lineBase1=tree.line, charBase1=tree.charPos, preText=preText, postText=postText, inlineText=inlineText)
-		else:
-			s = self._generateContext(preText=preText, postText=postText, inlineText=inlineText)
-
-		raise exType(s)
-		
+class ModuleTranslator(astwalker.ASTWalker):
 
 
 	def _addHelperFunctionsPreTranslation(self):
@@ -1179,29 +1099,21 @@ class ModuleTranslator(object):
 
 
 
-	def _dispatch(self, tree):
-		return self._dispatchTable[tree.text](tree)
+#	def _dispatch(self, tree):
+#		return self._dispatchTable[tree.text](tree)
 
 
 
 	def translateAST(self, tree, absFilename, sourcecode=''):
 		assert(tree.text == 'MODULESTART')
 
-		assert(os.path.isabs(absFilename))
-
-		self._filename = absFilename
-		self._sourcecode = sourcecode
-		self._sourcecodeLines = sourcecode.splitlines()
-
 		self._module = None
-
-
-		self._dispatch(tree)
+		self.walkAST(tree, absFilename, sourcecode)
 
 		self._module.verify()
 
-
 		return self._module
+
 
 
 	def _exportGloballyVisibleSymbols(self):
