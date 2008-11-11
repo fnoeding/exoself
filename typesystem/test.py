@@ -26,11 +26,12 @@ class ESType(object):
 
 
 	def deriveConst(self):
-		return ESType([self], ('const', None))
+		return ESType._simplify(ESType([self], ('const', None)))
 
 
 	def deriveInvariant(self):
-		return ESType([self], ('invariant', None))
+		# everything referenced by an invariant is also invariant
+		return ESType._simplify(ESType([self], ('invariant', None)))
 
 
 	def deriveTypedef(self, name):
@@ -56,6 +57,33 @@ class ESType(object):
 		''' only valid inside structs! '''
 		return ESType([], ('selfpointer', None))
 
+	@staticmethod
+	def _simplify(t):
+		# removes unnecessary const / invariant nodes
+
+		# const(const(X)) == const(X)
+		# invariant(invariant(X)) == invariant(X)
+		# const(invariant(X)) == const(X)
+		# invariant(const(X)) == ??? --> assert(0)?
+		if t.payload[0] == 'invariant':
+			assert(len(t.parents) == 1)
+
+			if t.parents[0].payload[0] == 'invariant':
+				return t.parents[0]
+			elif t.parents[0].payload[0] == 'const':
+				# TODO
+				pass
+		elif t.payload[0] == 'const':
+			assert(len(t.parents) == 1)
+
+			if t.parents[0].payload[0] == 'const':
+				return t.parents[0]
+			elif t.parents[0].payload[0] == 'invariant':
+				assert(len(t.parents[0].parents) == 1)
+				return t.parents[0].parents[0].deriveConst()
+				
+
+		return t
 
 	
 	def __str__(self):
@@ -301,6 +329,18 @@ def main():
 	fi_bi = ESType.createFunction('mod_pkg_fi_bi', [ts.find('int')], [ts.find('byte'), ts.find('int')])
 	ts.addType(fi_bi, 'fi_bi')
 	print fi_bi, '-->', fi_bi.toLLVMType()
+
+
+	# const / invariant tests
+	iint64 = ts.find('int64').deriveInvariant()
+	print iint64, '-->', iint64.toLLVMType()
+	print 'invariant(invariant(int64)):', iint64.deriveInvariant()
+	cint64 = ts.find('int64').deriveConst()
+	print cint64, '-->', cint64.toLLVMType()
+	print 'const(const(int64)):', cint64.deriveConst()
+
+	print 'FIXME? forbid this? invariant(const(int64)):', ts.find('int64').deriveConst().deriveInvariant()
+	print 'const(invariant(int64)):', ts.find('int64').deriveInvariant().deriveConst()
 
 
 
