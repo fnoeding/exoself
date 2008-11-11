@@ -1,5 +1,7 @@
 #!/usr/bin/python
 
+# TODO discuss: invariant, const, final
+
 
 import setuppaths
 
@@ -63,7 +65,7 @@ class ESType(object):
 
 		# const(const(X)) == const(X)
 		# invariant(invariant(X)) == invariant(X)
-		# const(invariant(X)) == const(X)
+		# const(invariant(X)) == invariant(X)
 		# invariant(const(X)) == ??? --> assert(0)?
 		if t.payload[0] == 'invariant':
 			assert(len(t.parents) == 1)
@@ -79,8 +81,7 @@ class ESType(object):
 			if t.parents[0].payload[0] == 'const':
 				return t.parents[0]
 			elif t.parents[0].payload[0] == 'invariant':
-				assert(len(t.parents[0].parents) == 1)
-				return t.parents[0].parents[0].deriveConst()
+				return t.parents[0]
 				
 
 		return t
@@ -332,15 +333,15 @@ def main():
 
 
 	# const / invariant tests
-	iint64 = ts.find('int64').deriveInvariant()
-	print iint64, '-->', iint64.toLLVMType()
-	print 'invariant(invariant(int64)):', iint64.deriveInvariant()
-	cint64 = ts.find('int64').deriveConst()
-	print cint64, '-->', cint64.toLLVMType()
-	print 'const(const(int64)):', cint64.deriveConst()
+	iint64ptr = ts.find('int64ptr').deriveInvariant()
+	print iint64ptr, '-->', iint64ptr.toLLVMType()
+	print 'invariant(invariant(int64*)):', iint64ptr.deriveInvariant()
+	cint64ptr = ts.find('int64ptr').deriveConst()
+	print cint64ptr, '-->', cint64ptr.toLLVMType()
+	print 'const(const(int64*)):', cint64ptr.deriveConst()
 
-	print 'FIXME? forbid this? invariant(const(int64)):', ts.find('int64').deriveConst().deriveInvariant()
-	print 'const(invariant(int64)):', ts.find('int64').deriveInvariant().deriveConst()
+	print 'FIXME? forbid this? invariant(const(int64*)):', ts.find('int64ptr').deriveConst().deriveInvariant()
+	print 'const(invariant(int64*)):', ts.find('int64ptr').deriveInvariant().deriveConst()
 
 
 
