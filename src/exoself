@@ -37,8 +37,8 @@ import sys
 from optparse import OptionParser, OptionGroup
 
 
-import frontend
-import backend
+from source2ast import sourcecode2AST, AST2StringAST, AST2DOT, AST2StringAST
+from ast2llvm import ModuleTranslator, CompileError, RecoverableCompileError
 
 import llvm
 import llvm.core
@@ -117,33 +117,33 @@ def main():
 	source = file(fn).read()
 
 	# build AST
-	numErrors, ast = frontend.sourcecode2AST(source)
+	numErrors, ast = sourcecode2AST(source)
 	if numErrors:
 		print 'aborting, %d errors occured' % numErrors
 		return 1
 	if options.saveTemps or options.astOnly:
 		f = file('%s.ast' % baseFN, 'wt')
-		f.write(frontend.AST2StringAST(ast))
+		f.write(AST2StringAST(ast))
 		f.close()
 
 	if options.ast2dot:
 		f = file('%s.dot' % baseFN, 'wt')
-		f.write(frontend.AST2DOT(ast))
+		f.write(AST2DOT(ast))
 		f.close()
 
 	if options.ast2png:
 		f = file('%s.png' % baseFN, 'wt')
-		f.write(frontend.AST2PNG(ast))
+		f.write(AST2PNG(ast))
 		f.close()
 		
 	if options.astOnly:
 		return 0
 
 	# build llvm IR
-	mt = backend.ModuleTranslator()
+	mt = ModuleTranslator()
 	try:
 		module = mt.translateAST(ast, fn, source)
-	except backend.CompileError, e:
+	except CompileError, e:
 		print e.message.rstrip()
 		return 1
 

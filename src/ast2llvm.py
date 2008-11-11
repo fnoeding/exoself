@@ -340,9 +340,9 @@ class ModuleTranslator(object):
 		#     this can be used by any make like tool to instruct the compiler to generate (precompiled???) headers
 		#     the headers can be parsed much faster
 		#     additionally we should maintain an internal list of already parsed modules
-		import frontend
+		from source2ast import sourcecode2AST
 
-		numErrors, ast = frontend.sourcecode2AST(toImportData)
+		numErrors, ast = sourcecode2AST(toImportData)
 		if numErrors:
 			self._raiseException(CompileError, tree=tree.children[0], inlineText='module contains errors')
 
