@@ -51,6 +51,11 @@ class ESType(object):
 		parts.extend(paramTypes)
 		return ESType(parts, ('function', (name, (len(returnTypes)))))
 
+	@staticmethod
+	def createSelfPointer():
+		''' only valid inside structs! '''
+		return ESType([], ('selfpointer', None))
+
 
 	
 	def __str__(self):
@@ -95,9 +100,24 @@ class ESType(object):
 
 		if self.payload[0] == 'struct':
 			llvmTypes = []
+			opaques = []
 			for p in self.parents:
-				llvmTypes.append(p.toLLVMType())
-			return Type.struct(llvmTypes)
+				# special case: self pointer --> opaque type
+				if p.payload[0] == 'selfpointer':
+					t = Type.opaque()
+					opaques.append(t)
+					llvmTypes.append(t)
+				else:
+					llvmTypes.append(p.toLLVMType())
+
+			s = Type.struct(llvmTypes)
+
+			# refine types
+			for t in opaques:
+				t.refine(Type.pointer(s))
+
+			return s
+
 		elif self.payload[0] == 'function':
 			llvmTypes = []
 			for p in self.parents:
@@ -272,7 +292,9 @@ def main():
 
 
 	# define a *recursive* structure
-	# TODO
+	linkedListContents = [ts.find('void').derivePointer(), ESType.createSelfPointer(), ESType.createSelfPointer()]
+	linkedList = ESType.createStruct('pkg_mod_linkedList', linkedListContents)
+	print linkedList, '-->', linkedList.toLLVMType()
 
 
 	# create a function
