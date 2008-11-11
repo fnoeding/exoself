@@ -45,6 +45,7 @@ from esfunction import ESFunction
 from esvalue import ESValue
 from esvariable import ESVariable
 from estype import ESType
+from errors import *
 
 def _childrenIterator(tree):
 	n = tree.getChildCount()
@@ -53,15 +54,6 @@ def _childrenIterator(tree):
 
 
 
-
-class CompileError(Exception):
-	pass
-
-class RecoverableCompileError(CompileError):
-	# just continue with next suitable AST node, for example continue with next function
-	# if this error is raised compilation MUST still fail! It only allows to give the user
-	# more information about further errors in the source code
-	pass
 
 
 
