@@ -364,6 +364,14 @@ def main():
 	assert(fi_ci.isEquivalentTo(fi_bi, True))
 
 
+	# create an enum type
+	# this is just a typedef
+	enumX = ts.find('int32').deriveTypedef('pkg_mod_enumX') # enum(int32) enumX {a,b,c,d}
+	print enumX, '-->', enumX.toLLVMType()
+	assert(not enumX.isEquivalentTo(ts.find('int32'), False))
+	assert(enumX.isEquivalentTo(ts.find('int32'), True))
+
+
 	# const / invariant tests
 	iint64ptr = ts.find('int64ptr').deriveInvariant()
 	print iint64ptr, '-->', iint64ptr.toLLVMType()
