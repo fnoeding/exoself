@@ -1,6 +1,43 @@
 #!/usr/bin/python
 
-# TODO discuss: invariant, const, final
+# TODO think about better names for the concepts of 'final', 'const', 'invariant'
+# final: means assign once, but then equal to normal variable --> froozen?
+# invariant: sealed?
+# const: readonly?
+
+
+# storage classes
+#     auto
+#     static
+#     scope (destructor is called when variable leaves scope)
+#     final (variable is rvalue, but has memory associated)
+#     invariant (variable is rvalue and the use of the variable may be replaced with refered data)
+#     const (essentially invariant, but data type is const instead of invariant)
+#     extern (not really a storage class, but a linkage specifier; may be combined with any storage class)
+
+
+# final
+# final is a storage class, not a type!
+# final 'freezes' the bits of a variable. If the variable is of scalar type no assignments are possible, if the variable is of composite type like a structure, then both the variable itself and the directly referenced fields can not be assigned to. The type of its contents is const
+# examples:
+#     x as final int32 = 42;
+#     x = 5 # error
+#     s as final someStruct = {...};
+#     s = {...}; # error
+#     s.x = 5 # error
+#     *s.x = 5 # ok, contents of 
+
+# invariant as a type property
+# invariant has no influence on the variable itself. It just says that data accessed through the variable can never change
+
+# const as a type property
+# const has no influence no the variable itself. It just says that data accessed through the variable can not be changed through this specific variable, but might be changed through other ways.
+
+# invariant as a storage class
+# has essentially the same affect as using the 'final' storage class: The bits of the variable are frozen. Additionally it is forbidden to take the address of an variable with invariant storage class. That allows moving the referred to data to ROM. The referred data has type invariant.
+
+# const as a storage class
+# see 'invarinant' with the difference that the referred data has type const and may not be moved to ROM, since it could be changed through other means than this variable.
 
 
 import setuppaths
@@ -14,6 +51,8 @@ class ESTypeError(Exception):
 
 
 class ESType(object):
+	''' represents types of data, not variables! '''
+
 	def __init__(self, parents, payload):
 		''' do not call directly! use construction methods '''
 		assert(isinstance(parents, list))
@@ -277,8 +316,41 @@ class ESTypeSystem(object):
 
 
 	
+class ESVariable(object):
+	def __init__(self, name, esType, storageClass='auto', linkage='default'):
+		assert(isinstance(esType, ESType))
+		self.name = name
+		self._esType = esType # type can be modified by certain storage classes
+		self.storageClass = storageClass
+		self.linkage = linkage # only useful for global variables
+
+
+	def getESType(self):
+		if self.storageClass == 'invariant':
+			return self._esType.deriveInvariant()
+		elif self.storageClass == 'const':
+			return self._esType.deriveConst()
+		elif self.storageClass == 'final':
+			return self._esType.deriveConst()
+		return self._esType
+
+
+	def toLLVMType(self):
+		# include things like storage class, linking etc
+		return self.esType.toLLVMType()
+
+	def __str__(self):
+		return 'storage=%s linkage=%s %s as %s --> %s' % (self.storageClass, self.linkage, self.name, self.esType, self.llvmType)
+
+	def isAssignable(self):
+		if self.storageClass in ['invariant', 'const', 'final']:
+			return False
+
+		return True
 
 		
+	llvmType = property(toLLVMType)
+	esType = property(getESType)
 
 
 def main():
@@ -287,27 +359,43 @@ def main():
 	# create types for some scalar variables
 	int32 = ts.find('int32') # x as int32
 	print int32, '-->', int32.toLLVMType() # x as int32;
+	print ESVariable('x', int32) 
+	print
+
 	int64 = ts.find('int64') # x as int64;
 	print int64, '-->', int64.toLLVMType()
+	print ESVariable('x', int64)
+	print
+
 	int64ptr = ts.find('int64').derivePointer() # x as int64*;
 	print int64ptr, '-->', int64ptr.toLLVMType()
+	print ESVariable('x', int64ptr)
+	print
+
 	int64ptrptr = ts.find('int64').derivePointer().derivePointer() # x as int64**;
 	print int64ptrptr, '-->', int64ptrptr.toLLVMType()
+	print ESVariable('x', int64ptrptr)
+	print
 
 
 	# create some aliases for basic types
 	ts.addAlias('int32', 'int') # alias int as int32
 	int = ts.find('int')
 	print int, '-->', int.toLLVMType()
+	print ESVariable('x', int)
+	print
+
 	ts.addAlias('int64', 'long') # alias long as int64
 	long = ts.find('long')
 	print long, '-->', long.toLLVMType()
+	print ESVariable('x', long)
+	print
 
 
 	# create some aliases for pointer types
 	int64ptr = ts.find('int64').derivePointer()
 	ts.addType(int64ptr, 'int64ptr')
-	print int64ptr, '-->', int64ptr.derivePointer()
+	print int64ptr, '-->', int64ptr.toLLVMType()
 
 
 	# create some typedefs
@@ -349,6 +437,7 @@ def main():
 	# define a *recursive* structure
 	linkedListContents = [ts.find('void').derivePointer(), ESType.createSelfPointer(), ESType.createSelfPointer()]
 	linkedList = ESType.createStruct('pkg_mod_linkedList', linkedListContents)
+	ts.addType(linkedList, 'linkedList')
 	print linkedList, '-->', linkedList.toLLVMType()
 
 
@@ -384,6 +473,13 @@ def main():
 	print 'const(invariant(int64*)):', ts.find('int64ptr').deriveInvariant().deriveConst()
 
 
+	# final
+	xFinalInt32 = ESVariable('xFinalInt32', ts.find('int32'), storageClass='final')
+	print xFinalInt32
+	assert(not xFinalInt32.isAssignable())
+
+	xFinalLL = ESVariable('xFinalLL', ts.find('linkedList'), storageClass='final')
+	print xFinalLL
 
 
 
