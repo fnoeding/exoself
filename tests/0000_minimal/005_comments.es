@@ -14,5 +14,6 @@ def main() as void # comment
 	pass/* in
 			line
 			comment */; # another comment
+	// another comment
 }
 

@@ -102,7 +102,7 @@ FLOAT: Float;// TODO HexFloat for exact representation
 NAME: (Letter | '_') (Letter | Digit | '_')*;
 
 // whitespace, comments
-COMMENT: '#' (~('\n' | '\r'))* ('\n' | '\r' ('\n')?) {$channel=HIDDEN};
+COMMENT: ('#' | '//') (~('\n' | '\r'))* ('\n' | '\r' ('\n')?) {$channel=HIDDEN};
 MULTILINE_COMMENT: '/*' (options {greedy=false;}: ~('*/'))* '*/' {$channel=HIDDEN};
 
 NEWLINE: (('\r')? '\n')+ {$channel=HIDDEN};
@@ -118,7 +118,6 @@ STAR: '*';
 DOUBLESTAR: '**';
 PERCENT: '%';
 SLASH: '/';
-DOUBLESLASH: '//';
 COLON:	':';
 LPAREN: '(';
 RPAREN: ')';
@@ -180,7 +179,6 @@ aug_assign:
 		| op=MINUS
 		| op=STAR
 		| op=SLASH
-		| op=DOUBLESLASH
 		| op=DOUBLESTAR
 		| op=PERCENT
 	) ASSIGN expr -> ^(ASSIGN NAME ^($op ^(VARIABLE NAME) expr));
@@ -221,7 +219,7 @@ comp_op: LESS | LESSEQUAL | EQUAL | NOTEQUAL | GREATEREQUAL | GREATER;
 
 expr: test_expr;
 arith_expr: term ((PLUS^ | MINUS^) term)*;
-term: factor ((STAR^ | SLASH^ | DOUBLESLASH^ | PERCENT^) factor)*;
+term: factor ((STAR^ | SLASH^ | PERCENT^) factor)*;
 factor:
 	PLUS^ factor
 	| MINUS^ factor

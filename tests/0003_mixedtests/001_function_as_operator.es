@@ -2,7 +2,7 @@ module t001
 
 def avg(a as int32, b as int32) as int32
 {
-	return (a + b) // 2;
+	return (a + b) / 2;
 }
 
 
