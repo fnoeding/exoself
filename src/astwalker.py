@@ -38,6 +38,7 @@ class ASTWalker(object):
 		dt = {}
 		self._dispatchTable = dt
 		self._ignoreUnknownNodes = False
+		self._nodes = [] # contains a list of all nodes starting with root node to current node; maintained by _dispatch
 
 
 		dt[u'MODULESTART'] = '_onModuleStart'
@@ -87,7 +88,11 @@ class ASTWalker(object):
 		elif not callee:
 			raise AssertionError('handler for ast node not implemented: %s / %s' % (ast.text, calleeName))
 		
-		return callee(ast)
+		self._nodes.append(ast)
+		try:
+			return callee(ast)
+		finally:
+			self._nodes.pop()
 
 	def _generateContext(self, preText, postText, inlineText='', lineBase1=0, charBase1=0, numBefore=5, numAfter=0):
 		if not self._sourcecodeLines or not lineBase1:

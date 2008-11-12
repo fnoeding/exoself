@@ -26,10 +26,21 @@
 # ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#
+# 
+
+from errors import CompileError, RecoverableCompileError
+from estype import ESType
 
 
-
+elementaryTypes = {}
+for i in [8, 16, 32, 64]:
+	elementaryTypes[u'int%d' % i] = ESType([], ('elementary', 'int%d' % i))
+	#elementaryTypes[u'uint%d' % i] = ESType([], ('elementary', 'uint%d' % i))
+del i
+elementaryTypes[u'bool'] = ESType([], ('elementary', 'bool'))
+elementaryTypes[u'void'] = ESType([], ('elementary', 'void'))
+elementaryTypes[u'single'] = ESType([], ('elementary', 'single'))
+elementaryTypes[u'double'] = ESType([], ('elementary', 'double'))
 
 
 

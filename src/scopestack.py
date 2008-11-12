@@ -31,7 +31,7 @@
 
 from esfunction import ESFunction
 from esvariable import ESVariable
-from estype import ESType
+from estype import ESTypeOld as ESType
 
 
 

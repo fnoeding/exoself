@@ -30,20 +30,211 @@
 
 
 from llvm.core import *
-import typesystem
+
 
 
 class ESType(object):
-	def __init__(self, typename):
-		assert(isinstance(typename, unicode))
+	''' represents types of data, not variables! '''
 
-		self.typename = typename
+	def __init__(self, parents, payload):
+		''' do not call directly! use construction methods '''
+		assert(isinstance(parents, list))
+		for x in parents:
+			assert(isinstance(x, ESType))
+		self.parents = parents
+		self.payload = payload
 
 
-	def getLLVMType(self):
-		return typesystem.ESTypeToLLVM(self.typename)
+	def derivePointer(self):
+		return ESType([self], ('pointer', None))
 
-	llvmType = property(getLLVMType)
 
+	def deriveConst(self):
+		return ESType._simplify(ESType([self], ('const', None)))
+
+
+	def deriveInvariant(self):
+		# everything referenced by an invariant is also invariant
+		return ESType._simplify(ESType([self], ('invariant', None)))
+
+
+	def deriveTypedef(self, name):
+		# break structural equivalence
+		return ESType([self], ('typedef', name))
+
+
+	@staticmethod
+	def createStruct(name, parts):
+		return ESType(parts, ('struct', name))
+
+
+	@staticmethod
+	def createFunction(returnTypes, paramTypes):
+		assert(len(returnTypes) >= 1)
+		parts = []
+		parts.extend(returnTypes)
+		parts.extend(paramTypes)
+		return ESType(parts, ('function', len(returnTypes)))
+
+	@staticmethod
+	def createSelfPointer():
+		''' only valid inside structs! '''
+		return ESType([], ('selfpointer', None))
+
+	@staticmethod
+	def _simplify(t):
+		# removes unnecessary const / invariant nodes
+
+		# const(const(X)) == const(X)
+		# invariant(invariant(X)) == invariant(X)
+		# const(invariant(X)) == invariant(X)
+		# invariant(const(X)) == ??? --> assert(0)?
+		if t.payload[0] == 'invariant':
+			assert(len(t.parents) == 1)
+
+			if t.parents[0].payload[0] == 'invariant':
+				return t.parents[0]
+			elif t.parents[0].payload[0] == 'const':
+				# TODO
+				pass
+		elif t.payload[0] == 'const':
+			assert(len(t.parents) == 1)
+
+			if t.parents[0].payload[0] == 'const':
+				return t.parents[0]
+			elif t.parents[0].payload[0] == 'invariant':
+				return t.parents[0]
+				
+
+		return t
+
+	
+	def __str__(self):
+		if not self.parents:
+			return str(self.payload)
+		elif len(self.parents) == 1:
+			return str(self.payload) + ' ' + str(self.parents[0])
+		else:
+			s = []
+			for p in self.parents:
+				s.append(str(p))
+
+			return '%s { %s }' % (self.payload, ', '.join(s))
+
+
+	def isEquivalentTo(self, other, structural):
+		# structural equivalence: Skip any typedefs and ignore different struct names
+
+		t1 = self
+		t2 = other
+
+		if structural:
+			while t1.payload[0] == 'typedef':
+				assert(len(t1.parents) == 1)
+				t1 = t1.parents[0]
+
+			while t2.payload[0] == 'typedef':
+				assert(len(t2.parents) == 1)
+				t2 = t2.parents[0]
+
+
+		if structural and t1.payload[0] == 'struct' and t2.payload[0] == 'struct':
+			pass
+		elif t1.payload != t2.payload:
+			return False
+
+		if len(t1.parents) != len(t2.parents):
+			return False
+
+		for i in range(len(t1.parents)):
+			if not t1.parents[i].isEquivalentTo(t2.parents[i], structural):
+				return False
+
+
+		return True
+
+
+
+	def __eq__(self, other):
+		raise NotImplementedError('use isEquivalentTo')
+
+
+
+	def __ne__(self, other):
+		raise NotImplementedError('use isEquivalentTo')
+
+
+
+	def toLLVMType(self):
+		if len(self.parents) > 1:
+			assert(self.payload[0] in ['struct', 'function'])
+		if not self.parents:
+			assert(self.payload[0] == 'elementary')
+
+		if self.payload[0] == 'struct':
+			llvmTypes = []
+			opaques = []
+			for p in self.parents:
+				# special case: self pointer --> opaque type
+				if p.payload[0] == 'selfpointer':
+					t = Type.opaque()
+					opaques.append(t)
+					llvmTypes.append(t)
+				else:
+					llvmTypes.append(p.toLLVMType())
+
+			s = Type.struct(llvmTypes)
+
+			# refine types
+			for t in opaques:
+				t.refine(Type.pointer(s))
+
+			return s
+
+		elif self.payload[0] == 'function':
+			llvmTypes = []
+			for p in self.parents:
+				llvmTypes.append(p.toLLVMType())
+
+			nRets = self.payload[1]
+			rets = llvmTypes[:nRets]
+			params = llvmTypes[nRets:]
+
+			if nRets == 1:
+				return Type.function(rets[0], params)
+			else:
+				# does not work in LLVM 2.3
+				return Type.function(rets, params)
+		elif self.payload[0] == 'elementary':
+			t = self.payload[1]
+			if t == u'int8':
+				return Type.int(8)
+			elif t == u'int16':
+				return Type.int(16)
+			elif t == u'int32':
+				return Type.int(32)
+			elif t == u'int64':
+				return Type.int(64)
+			elif t == u'bool':
+				return Type.int(1)
+			elif t == u'void':
+				return Type.void()
+			elif t == u'single':
+				return Type.float()
+			elif t == u'double':
+				return Type.double()
+			else:
+				raise NotImplementedError('conversion to LLVM type is not supported for elementary type: %s' % t)
+		elif self.payload[0] == 'pointer':
+			# work around: in LLVM exists no 'void*', just use an byte sized pointer
+			llvmT = self.parents[0].toLLVMType()
+			if llvmT == Type.void():
+				return Type.pointer(Type.int(8))
+			else:
+				return Type.pointer(llvmT)
+		elif self.payload[0] in ['const', 'invariant', 'typedef']:
+			return self.parents[0].toLLVMType()
+		else:
+			raise NotImplementedError('can not convert payload to LLVM type: %s' % self.payload)
 
 

@@ -33,21 +33,29 @@ from estype import ESType
 
 
 class ESFunction(object):
-	def __init__(self, llvmFunc, returnType, paramTypes):
-		# TODO add function name
-		# TODO add paramater names
-		assert(isinstance(returnType, ESType))
-		for x in paramTypes:
-			assert(isinstance(x, ESType))
+	def __init__(self, name, esType, paramNames, mangling=None, linkage=None):
+		assert(isinstance(name, unicode))
+		assert(isinstance(esType, ESType))
+		for x in paramNames:
+			assert(isinstance(x, unicode))
 
-		self.llvmFunc = llvmFunc
-		self.returnType = returnType
-		self.paramTypes = paramTypes
+		self.esType = esType
+		self.name = name
+		self.parameterNames = paramNames
 
-	
-	def getLLVMType(self):
-		return self.llvmFunc.type
+		if not mangling:
+			mangling = 'default'
+		assert(mangling in ['default', 'C'])
+		self.mangling = mangling
 
-	llvmType = property(getLLVMType)
+		if not linkage:
+			linkage = 'default'
+		assert(linkage in ['default', 'extern'])
+		self.linkage = linkage
+
+
+	def __str__(self):
+		return '%s: %s; linkage=%s mangling=%s' % (self.name, self.esType, self.linkage, self.mangling)
+
 
 

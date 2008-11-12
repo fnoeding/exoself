@@ -30,17 +30,42 @@
 
 
 
-
 class ESVariable(object):
-	def __init__(self, llvmRef, typename, name):
-		assert(isinstance(name, unicode))
-		self.llvmRef = llvmRef
-		self.typename = typename
+	def __init__(self, name, esType, storageClass='auto', linkage='default'):
+		assert(isinstance(esType, ESType))
 		self.name = name
+		self._esType = esType # type can be modified by certain storage classes
+		self.storageClass = storageClass
+		self.linkage = linkage # only useful for global variables
 
-	def getLLVMType(self):
-		return self.llvmRef.type
 
-	llvmType = property(getLLVMType)
+	def getESType(self):
+		if self.storageClass == 'invariant':
+			return self._esType.deriveInvariant()
+		elif self.storageClass == 'const':
+			return self._esType.deriveConst()
+		elif self.storageClass == 'final':
+			return self._esType.deriveConst()
+		return self._esType
+
+
+	def toLLVMType(self):
+		# include things like storage class, linking etc
+		return self.esType.toLLVMType()
+
+	def __str__(self):
+		return 'storage=%s linkage=%s %s as %s --> %s' % (self.storageClass, self.linkage, self.name, self.esType, self.llvmType)
+
+	def isAssignable(self):
+		if self.storageClass in ['invariant', 'const', 'final']:
+			return False
+
+		return True
+
+		
+	llvmType = property(toLLVMType)
+	esType = property(getESType)
+
+
 
 

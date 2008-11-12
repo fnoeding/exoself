@@ -44,7 +44,7 @@ from typesystem import *
 from esfunction import ESFunction
 from esvalue import ESValue
 from esvariable import ESVariable
-from estype import ESType
+from estype import ESTypeOld as ESType
 from errors import *
 import astwalker
 
