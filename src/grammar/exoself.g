@@ -72,6 +72,7 @@ ELSE: 'else';
 ELIF: 'elif';
 FOR: 'for';
 IN: 'in';
+RANGE: 'range';
 BREAK: 'break';
 CONTINUE: 'continue';
 WHILE: 'while';
@@ -161,7 +162,7 @@ compound_stmt: simple_stmt | if_stmt | for_stmt | while_stmt;
 if_stmt: IF^ expr block (ELSE! IF! expr block)* (ELSE! block)?;
 
 for_stmt: FOR^ NAME IN! for_expression block;
-for_expression: 'range'^ LPAREN! expr (COMMA! expr (COMMA! expr)?)? RPAREN!;
+for_expression: RANGE^ LPAREN! expr (COMMA! expr (COMMA! expr)?)? RPAREN!;
 
 while_stmt: WHILE^ expr block (ELSE! block)?;
 
