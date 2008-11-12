@@ -56,17 +56,25 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 	def _findSymbolHelper(self, name):
 		# start at current symbol table, then walk all AST nodes containing symbol tables until root node. Stop search when something was found
-
+		results = []
 		for ast in reversed(self._nodes):
 			st = getattr(ast, 'symbolTable', None)
 			if not st:
 				continue
 
 			s = st.findSymbol(name)
-			if s:
+			if not s:
+				continue
+
+			if isinstance(s, list):
+				results.extend(s)
+			else:
 				return s
 
-		return None
+		if results:
+			return results
+		else:
+			return None
 
 
 	def _findSymbol(self, **kwargs): # fromTree=None, name=None, type_=None
@@ -77,20 +85,23 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			fromTree = kwargs['fromTree']
 			name = fromTree.text
 
-		if 'type_' in kwargs:
-			type_ = kwargs['type_']
-		else:
-			type_ = None
+		type_ = kwargs['type_']
 
-		if name:
-			s = self._findSymbolHelper(name)
-		else:
-			s = self._findSymbolHelper(fromTree.text)
+
+		s = self._findSymbolHelper(name)
 
 		if not s:
-			self._raise(RecoverableCompileError, tree=fromTree, inlineText='could not find symbol')
-		if type_ and not isinstance(s, type_):
-			self._raise(RecoverableCompileError, tree=fromTree, inlineText='symbol did not match expected type: %s' % type_) # instead of str(type_) use a better description
+			self._raiseException(RecoverableCompileError, tree=fromTree, inlineText='could not find symbol')
+		if type_:
+			bad = False
+			if type_ == ESFunction:
+				if not isinstance(s, list):
+					bad = True
+			elif not isinstance(s, type_):
+				bad = True
+
+			if bad:
+				self._raiseException(RecoverableCompileError, tree=fromTree, inlineText='symbol did not match expected type: %s' % type_) # instead of str(type_) use a better description
 
 		return s
 
@@ -114,7 +125,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		if prevDef:
 			# can only overload / overwrite functions
 			if not isinstance(prevDef, list) or not isinstance(symbol, ESFunction):
-				self._raise(RecoverableCompileError, tree=fromTree, inlineText='symbol already defined')
+				self._raiseException(RecoverableCompileError, tree=fromTree, inlineText='symbol already defined')
 
 
 		for ast in reversed(self._nodes):
@@ -238,7 +249,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			elif name == u'mangling':
 				mangling = value
 			else:
-				self._raise(RecoverableCompileError, tree=modifiers.children[i * 2 +1], inlineText='unknown function modifier')
+				self._raiseException(RecoverableCompileError, tree=modifiers.children[i * 2 +1], inlineText='unknown function modifier')
 		
 
 		esFunction = ESFunction(functionName, functionType, parameterNames, mangling=mangling, linkage=linkage)
@@ -258,37 +269,121 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		assert(len(ast.children) == 5)
 
 		# add a new symbol table and add entries for parameter names
-		ast.symbolTable = SymbolTable() # do not use directly! use self._addSymbol
+		ast.symbolTable = SymbolTable() # do not use directly! use self._addSymbol etc.
 
 		esFunction = ast.esFunction
 		esParamTypes = esFunction.esType.getFunctionParameterTypes()
 		for i in range(len(esFunction.parameterNames)):
 			self._addSymbol(name=esFunction.parameterNames[i], symbol=esParamTypes[i])
 
-		# TODO
-		#blockNode = ast.children[4]
-		#self._dispatch(blockNode)
+		blockNode = ast.children[4]
+		self._dispatch(blockNode)
+
+
+	def _onBlock(self, ast):
+		assert(ast.text == 'BLOCK')
+
+		ast.symbolTable = SymbolTable() # do not use directly! use self._addSymbol etc.	
+
+		for x in ast.children:
+			self._dispatch(x)
 
 	
+	def _onPass(self, ast):
+		assert(ast.text == 'pass')
 
 
-def test():
-	import sys
-	import os
-	from source2ast import sourcecode2AST, AST2DOT, AST2PNG
+	def _onReturn(self, ast):
+		assert(ast.text == 'return')
 
-	sourcecode = file(sys.argv[1]).read()
-	numErrors, ast = sourcecode2AST(sourcecode)
-	assert(not numErrors)
+		# find enclosing function definion
+		esFunction = None
+		for n in reversed(self._nodes[:-1]):
+			esFunction = getattr(n, 'esFunction', None)
+			if esFunction:
+				break
 
-	ta = ASTTypeAnnotator()
-	ta.walkAST(ast=ast, filename=os.path.abspath(sys.argv[1]), sourcecode=sourcecode)
+		if not esFunction:
+			self._raiseException(CompileError, tree=ast, inlineText='a \'return\' statement must be inside a function body')
+
+		returnTypes = esFunction.esType.getFunctionReturnTypes()
+
+		assert(len(returnTypes) <= 1)
+
+		if not returnTypes:
+			# function returns 'void'
+			if len(ast.children) > 0:
+				self._raiseException(RecoverableCompileError, tree=ast, inlineText='function is declared as void: can\'t return anything')
+
+		else:
+			for i, x in enumerate(ast.children):
+				self._dispatch(x)
+				t = x.esType # every expression must have an esType member
+
+				# FIXME provide implicit conversion support 
+				if not t.isEquivalentTo(returnTypes[i], False):
+					self._raiseException(RecoverableCompileError, tree=ast.children[i], inlineText='incompatible return type')
 
 
 
-if __name__ == '__main__':
-	test()
+	def _onIntegerConstant(self, ast):
+		assert(ast.text == 'INTEGER_CONSTANT')
+
+		# FIXME really determine type of constant
+		ast.esType = self._findSymbol(name=u'int32', type_=ESType)
+
+
+	def _onBasicOperator(self, ast):
+		nodeType = ast.text
+		if ast.getChildCount() == 2 and nodeType in u'''* ** % / and xor or + - < <= == != >= >'''.split():
+			self._dispatch(ast.children[0])
+			self._dispatch(ast.children[1])
+
+			left = ast.children[0]
+			right = ast.children[1]
+
+			if nodeType in u'* ** % / + -'.split():
+				if left.esType.isEquivalentTo(right.esType, False):
+					ast.esType = left.esType
+				else:
+					raise NotImplementedError('FIXME TODO')
+			elif nodeType in u'and xor or < <= == != >= >'.split():
+				if left.esType.isEquivalentTo(right.esType, False):
+					ast.esType = self.findSymbol(name=u'bool', type_=ESType)
+				else:
+					raise NotImplementedError('FIXME TODO')
+			else:
+				raise NotImplementedError('FIXME TODO: %s' % nodeType)
+		elif ast.getChildCount() == 1 and nodeType in u'''- + not'''.split():
+			self._dispatch(ast.children[0])
+
+			if nodeType in u'- +'.split():
+				ast.esType = ast.children[0].esType
+			elif nodeType == u'not':
+				# TODO add implicit conversion to bool, if necessary
+				ast.esType = self._findSymbol(name=u'bool', type_=ESType)
+			else:
+				assert(0 and 'dead code path')
+		else:
+			assert(0 and 'dead code path')
+
+
+	def _onCallFunc(self, ast):
+		assert(ast.text == 'CALLFUNC')
+
+		calleeNameNode = ast.children[0]
+		argNodes = ast.children[1:]
+
+		esFunctions = self._findSymbol(fromTree=calleeNameNode, type_=ESFunction)
+
+		# TODO find best matching function for parameters
+		# FIXME taking the first one for testing...
+		assert(len(esFunctions) == 1)
+
+		returnTypes = esFunctions[0].esType.getFunctionReturnTypes()
+		assert(len(returnTypes) == 1)
+
+		ast.esType = returnTypes[0]
 	
-
 
 

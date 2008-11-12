@@ -38,7 +38,8 @@ from optparse import OptionParser, OptionGroup
 
 
 from source2ast import sourcecode2AST, AST2StringAST, AST2DOT, AST2StringAST
-from ast2llvm import ModuleTranslator, CompileError, RecoverableCompileError
+#from ast2llvm import ModuleTranslator, CompileError, RecoverableCompileError
+from typeannotator import ASTTypeAnnotator
 
 import llvm
 import llvm.core
@@ -138,6 +139,13 @@ def main():
 		
 	if options.astOnly:
 		return 0
+
+	# annotate ast
+	ta = ASTTypeAnnotator()
+	ta.walkAST(ast, fn, source)
+
+	return # FIXME
+
 
 	# build llvm IR
 	mt = ModuleTranslator()
