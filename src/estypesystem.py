@@ -44,3 +44,35 @@ elementaryTypes[u'double'] = ESType([], ('elementary', 'double'))
 
 
 
+implicitConversions = {}
+def _buildImplicitConversionsTable():
+	# bool to other
+	l = []
+	for x in u'int8 int16 int32 int64'.split():
+		l.append(elementaryTypes[x])
+	implicitConversions[elementaryTypes[u'bool']] = l
+
+	# int32 to other
+	l = []
+	for x in u'bool int64'.split():
+		l.append(elementaryTypes[x])
+	implicitConversions[elementaryTypes[u'int32']] = l
+
+_buildImplicitConversionsTable()
+
+
+def canImplicitlyCast(fromType, toType):
+	if not fromType in implicitConversions:
+		return False
+
+	l = implicitConversions[fromType]
+	for x in l:
+		if x.isEquivalentTo(toType, False):
+			return True
+
+	return False
+
+
+
+
+

@@ -88,6 +88,9 @@ def runTest(filebase):
 	else:
 		expectedRetval = 0
 
+	if options.compileOnly:
+		return True
+
 
 	exitStatus = os.system('%s ../tests_tmp/%s.bc' % (options.lli, filename))
 	retVal = os.WEXITSTATUS(exitStatus)
@@ -107,6 +110,7 @@ def main():
 	parser.add_option('-s', '--suite', help='test suite prefix', dest='suitePrefix', default='')
 	parser.add_option('-t', '--test', help='test prefix, ideally combined with suite prefix', dest='testPrefix', default='')
 	parser.add_option('-k', '--continue', help='continue even when tests fail', dest='continueAfterFailure', action='store_true', default=False)
+	parser.add_option('-c', '--compileonly', help='compile only, do not run', dest='compileOnly', action='store_true', default=False)
 	parser.add_option('--lli', help='path to lli command', dest='lli', default='lli')
 
 	options, args = parser.parse_args()

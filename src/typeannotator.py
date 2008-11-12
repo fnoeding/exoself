@@ -34,8 +34,10 @@ import os
 import astwalker
 from estype import ESType
 from esfunction import ESFunction
+from esvariable import ESVariable
 import estypesystem
 from symboltable import SymbolTable
+from tree import Tree
 
 
 class ASTTypeAnnotator(astwalker.ASTWalker):
@@ -135,6 +137,19 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 			st.addSymbol(name, symbol)
 			return
+
+	def _createCastNode(self, exprNode, fromTypeName, toTypeName):
+		# build an AST node like it would be created by the parser
+		# esType information is added by the caller
+
+		t = exprNode.copy(False) # copy line info
+		t.text = 'CAST'
+
+		t.addChild(exprNode.copy(True))
+		t.addChild(Tree(fromTypeName))
+		t.addChild(Tree(toTypeName))
+
+		return t
 
 
 	def _onModuleStart(self, ast):
@@ -274,7 +289,9 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		esFunction = ast.esFunction
 		esParamTypes = esFunction.esType.getFunctionParameterTypes()
 		for i in range(len(esFunction.parameterNames)):
-			self._addSymbol(name=esFunction.parameterNames[i], symbol=esParamTypes[i])
+			varName=esFunction.parameterNames[i]
+			esVar = ESVariable(varName, esParamTypes[i])
+			self._addSymbol(name=varName, symbol=esVar)
 
 		blockNode = ast.children[4]
 		self._dispatch(blockNode)
@@ -322,7 +339,11 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 				# FIXME provide implicit conversion support 
 				if not t.isEquivalentTo(returnTypes[i], False):
-					self._raiseException(RecoverableCompileError, tree=ast.children[i], inlineText='incompatible return type')
+					# types did not match, try implicit cast
+					if not estypesystem.canImplicitlyCast(t, returnTypes[i]):
+						self._raiseException(RecoverableCompileError, tree=ast.children[i], inlineText='incompatible return type')
+
+					# TODO insert CAST node
 
 
 
@@ -342,16 +363,23 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			left = ast.children[0]
 			right = ast.children[1]
 
+			esBool = self._findSymbol(name=u'bool', type_=ESType)
+
 			if nodeType in u'* ** % / + -'.split():
 				if left.esType.isEquivalentTo(right.esType, False):
 					ast.esType = left.esType
 				else:
 					raise NotImplementedError('FIXME TODO')
-			elif nodeType in u'and xor or < <= == != >= >'.split():
-				if left.esType.isEquivalentTo(right.esType, False):
-					ast.esType = self.findSymbol(name=u'bool', type_=ESType)
-				else:
-					raise NotImplementedError('FIXME TODO')
+			elif nodeType in u'and xor or'.split():
+				#if left.esType.isEquivalentTo(right.esType, False) and left.esType.isEquivalentTo(esBool, False):
+					ast.esType = esBool
+				#else:
+				#	raise NotImplementedError('FIXME TODO')
+			elif nodeType in u'< <= == != >= >'.split():
+				#if left.esType.isEquivalentTo(right.esType, False):
+					ast.esType = esBool
+				#else:
+				#	raise NotImplementedError('FIXME TODO')
 			else:
 				raise NotImplementedError('FIXME TODO: %s' % nodeType)
 		elif ast.getChildCount() == 1 and nodeType in u'''- + not'''.split():
@@ -384,6 +412,221 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		assert(len(returnTypes) == 1)
 
 		ast.esType = returnTypes[0]
+
+
+	def _onVariable(self, ast):
+		assert(ast.text == 'VARIABLE')
+
+		varNameNode = ast.children[0]	
+
+
+		s = self._findSymbol(fromTree=varNameNode, type_=ESVariable)
+
+		ast.esType = s.esType
+
+	def _onAssert(self, ast):
+		assert(ast.text == 'assert')
+
+		self._dispatch(ast.children[0])
+
+		esType = ast.children[0].esType
+		if not esType.isEquivalentTo(self._findSymbol(name=u'bool', type_=ESType), False):
+			if not estypesystem.canImplicitlyCast(esType, self._findSymbol(name=u'bool', type_=ESType)):
+				self._raiseException(RecoverableCompileError, tree=ast.children[0], inlineText='expression is of incompatible type. expected bool')
+
+			# TODO insert CAST node
+
+	def _onIf(self, ast):
+		assert(ast.text == 'if')
+
+		# dispatch all nodes
+		for x in ast.children:
+			self._dispatch(x)
+
+		n = len(ast.children)
+		for i in range(n // 2):
+			exprNode = ast.children[2 * i]
+			esType = exprNode.esType
+
+			if not esType.isEquivalentTo(self._findSymbol(name=u'bool', type_=ESType), False):
+				if not estypesystem.canImplicitlyCast(esType, self._findSymbol(name=u'bool', type_=ESType)):
+					self._raiseException(RecoverableCompileError, tree=ast.children[0], inlineText='expression is of incompatible type. expected bool')
+
+				# TODO insert CAST node
+
+
+	def _onDefVariable(self, ast):
+		assert(ast.text == 'DEFVAR')
+
+		varNameNode = ast.children[0]
+		varTypeNameNode = ast.children[1]
+
+		esType = self._findSymbol(fromTree=varTypeNameNode, type_=ESType)
+		esVar = ESVariable(varNameNode.text, esType)
+		self._addSymbol(fromTree=varNameNode, symbol=esVar)
+
+
+	def _onAssignHelper(self, varNameNode, exprNode):
+		self._dispatch(exprNode)
+		esType = exprNode.esType
+
+		try:
+			var = self._findSymbol(fromTree=varNameNode, type_=ESVariable)
+		except CompileError:
+			var = None
+
+		if not var:
+			# create new variable with type of expression
+			var = ESVariable(varNameNode.text, esType)
+			self._addSymbol(fromTree=varNameNode, symbol=var)
+		else:
+			if not var.esType.isEquivalentTo(esType, False):
+				if not estypesystem.canImplicitlyCast(esType, var.esType):
+					self._raiseException(RecoverableCompileError, tree=exprNode, inlineText='incompatible type')
+
+				# TODO insert CAST node
+
+
 	
+	def _onAssign(self, ast):
+		assert(ast.text == '=')
+
+		varNameNode = ast.children[0]
+		exprNode = ast.children[1]
+
+
+		self._onAssignHelper(varNameNode, exprNode)
+
+
+	def _onListAssign(self, ast):
+		assert(ast.text == 'LISTASSIGN')
+
+		# semantics of list assign in cases where a variable is referenced on both sides:
+		# 1st copy results of ALL expressions into temporary variables
+		# 2nd copy content of temporary variables to destination variables
+		# --> just assign esType of n-th expression to n-th assignee
+
+		destinationNameNodes = ast.children[0].children
+		exprNodes = ast.children[1].children
+
+		assert(len(destinationNameNodes) == len(exprNodes))
+
+		for i in range(len(exprNodes)):
+			self._onAssignHelper(destinationNameNodes[i], exprNodes[i])
+
+
+	def _onFor(self, ast):
+		assert(ast.text == 'for')
+
+		ast.symbolTable = SymbolTable() # do not use directly!
+
+		varNameNode = ast.children[0]
+		assert(ast.children[1].text == 'range')
+
+		rangeNode = ast.children[1]
+		blockNode = ast.children[2]
+
+		n = len(rangeNode.children)
+		if n == 3:
+			startExprNode = rangeNode.children[0]
+			stopExprNode = rangeNode.children[1]
+			stepExprNode = rangeNode.children[2]
+
+			self._dispatch(startExprNode)
+			self._dispatch(stopExprNode)
+			self._dispatch(stepExprNode)
+		elif n == 2:
+			startExprNode = rangeNode.children[0]
+			stopExprNode = rangeNode.children[1]
+			stepExprNode = None
+			
+			self._dispatch(startExprNode)
+			self._dispatch(stopExprNode)
+		elif n == 1:
+			startExprNode = None
+			stopExprNode = rangeNode.children[0]
+			stepExprNode = None
+
+			self._dispatch(stopExprNode)
+		else:
+			assert(0 and 'dead code path')
+
+
+		# FIXME for now only int32 support
+		int32 = self._findSymbol(name=u'int32', type_=ESType)
+		bad = False
+		if startExprNode and not startExprNode.esType.isEquivalentTo(int32, False):
+			bad = True
+		if stopExprNode and not stopExprNode.esType.isEquivalentTo(int32, False):
+			bad = True
+		if stepExprNode and not stepExprNode.esType.isEquivalentTo(int32, False):
+			bad = True
+
+		if bad:
+			self._raiseException(RecoverableCompileError, tree=rangeNode, inlineText='range expressions are currently only implemented for int32')
+
+		try:
+			var = self._findSymbol(fromTree=varNameNode, type_=ESVariable)
+		except CompileError:
+			var = None
+
+		if var:
+			if not var.esType.isEquivalentTo(int32, False):
+				self._raiseException(RecoverableCompileError, tree=varNameNode, inlineText='loop variable must be of type int32 until support for other types is implemented')
+		else:
+			var = ESVariable(varNameNode.text, int32)
+			self._addSymbol(fromTree=varNameNode, symbol=var)
+			
+		self._dispatch(blockNode)
+
+
+	def _onBreak(self, ast):
+		assert(ast.text == 'break')
+
+		ok = False
+		for n in reversed(self._nodes):
+			if n.text in ['for', 'while']:# TODO add 'case' / 'switch'
+				ok = True
+				break
+
+		if not ok:
+			self._raiseException(RecoverableCompileError, tree=ast, inlineText='may only be used inside for, while, switch and similar constructs')
+
+
+	def _onContinue(self, ast):
+		assert(ast.text == 'continue')
+
+		ok = False
+		for n in reversed(self._nodes):
+			if n.text in ['for', 'while']:
+				ok = True
+				break
+
+		if not ok:
+			self._raiseException(RecoverableCompileError, tree=ast, inlineText='may only be used inside for, while and similar constructs')
+
+
+	def _onWhile(self, ast):
+		assert(ast.text == 'while')
+
+		exprNode = ast.children[0]
+		self._dispatch(exprNode)
+
+		esType = exprNode.esType
+		bool = self._findSymbol(name=u'bool', type_=ESType)
+		if not esType.isEquivalentTo(bool, False):
+			# types did not match, try implicit cast
+			if not estypesystem.canImplicitlyCast(esType, bool):
+				self._raiseException(RecoverableCompileError, tree=ast.children[i], inlineText='incompatible type, expected bool')
+
+			# TODO add cast node
+
+
+		for x in ast.children[1:]:
+			self._dispatch(x)
+
+
+
+
 
 

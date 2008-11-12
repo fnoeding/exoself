@@ -29,6 +29,8 @@
 #
 
 
+from estype import ESType
+
 
 class ESVariable(object):
 	def __init__(self, name, esType, storageClass='auto', linkage='default'):
