@@ -30,6 +30,7 @@
 
 from errors import CompileError, RecoverableCompileError
 import os
+from tree import TreeType
 
 
 
@@ -40,31 +41,33 @@ class ASTWalker(object):
 		self._ignoreUnknownNodes = False
 		self._nodes = [] # contains a list of all nodes starting with root node to current node; maintained by _dispatch
 
+		tt = TreeType
+		dt[tt.MODULESTART] = '_onModuleStart'
+		dt[tt.PACKAGE] = '_onPackage'
+		dt[tt.MODULE] = '_onModule'
+		dt[tt.IMPORTALL] = '_onImportAll'
+		dt[tt.DEFFUNC] = '_onDefFunction'
+		dt[tt.BLOCK] = '_onBlock'
+		dt[tt.PASS] = '_onPass'
+		dt[tt.RETURN] = '_onReturn'
+		dt[tt.ASSERT] = '_onAssert'
+		dt[tt.IF] = '_onIf'
+		dt[tt.FOR] = '_onFor'
+		dt[tt.WHILE] = '_onWhile'
+		dt[tt.BREAK] = '_onBreak'
+		dt[tt.CONTINUE] = '_onContinue'
+		dt[tt.INTEGER_CONSTANT] = '_onIntegerConstant'
+		dt[tt.FLOAT_CONSTANT] = '_onFloatConstant'
+		dt[tt.CALLFUNC] = '_onCallFunc'
+		dt[tt.VARIABLE] = '_onVariable'
+		dt[tt.DEFVAR] = '_onDefVariable'
+		dt[tt.ASSIGN] = '_onAssign'
+		dt[tt.LISTASSIGN] = '_onListAssign'
 
-		dt[u'MODULESTART'] = '_onModuleStart'
-		dt[u'package'] = '_onPackage'
-		dt[u'module'] = '_onModule'
-		dt[u'IMPORTALL'] = '_onImportAll'
-		dt[u'DEFFUNC'] = '_onDefFunction'
-		dt[u'BLOCK'] = '_onBlock'
-		dt[u'pass'] = '_onPass'
-		dt[u'return'] = '_onReturn'
-		dt[u'assert'] = '_onAssert'
-		dt[u'if'] = '_onIf'
-		dt[u'for'] = '_onFor'
-		dt[u'while'] = '_onWhile'
-		dt[u'break'] = '_onBreak'
-		dt[u'continue'] = '_onContinue'
-		dt[u'INTEGER_CONSTANT'] = '_onIntegerConstant'
-		dt[u'FLOAT_CONSTANT'] = '_onFloatConstant'
-		dt[u'CALLFUNC'] = '_onCallFunc'
-		dt[u'VARIABLE'] = '_onVariable'
-		dt[u'DEFVAR'] = '_onDefVariable'
-
-		for x in u'+ - * ** / // % not and or xor < <= == != >= >'.split():
+		for x in [tt.PLUS, tt.MINUS, tt.STAR, tt.DOUBLESTAR, tt.SLASH, tt.PERCENT,
+				tt.NOT, tt.AND, tt.OR, tt.XOR,
+				tt.LESS, tt.LESSEQUAL, tt.EQUAL, tt.NOTEQUAL, tt.GREATEREQUAL, tt.GREATER]:
 			dt[x] = '_onBasicOperator'
-		dt[u'='] = '_onAssign'
-		dt[u'LISTASSIGN'] = '_onListAssign'
 
 
 
@@ -80,13 +83,13 @@ class ASTWalker(object):
 
 
 	def _dispatch(self, ast):
-		calleeName = self._dispatchTable[ast.text]
+		calleeName = self._dispatchTable[ast.type]
 		callee = getattr(self, calleeName, None)
 
 		if not callee and self._ignoreUnknownNodes:
 			return None
 		elif not callee:
-			raise AssertionError('handler for ast node not implemented: %s / %s' % (ast.text, calleeName))
+			raise AssertionError('handler for ast node not implemented: %s / %s' % (ast.type, calleeName))
 		
 		self._nodes.append(ast)
 		try:

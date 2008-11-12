@@ -37,7 +37,7 @@ import sys
 from optparse import OptionParser, OptionGroup
 
 
-from source2ast import sourcecode2AST, AST2StringAST, AST2DOT, AST2StringAST
+from source2ast import sourcecode2AST, AST2StringAST, AST2DOT, AST2PNG, AST2StringAST
 #from ast2llvm import ModuleTranslator, CompileError, RecoverableCompileError
 from typeannotator import ASTTypeAnnotator
 

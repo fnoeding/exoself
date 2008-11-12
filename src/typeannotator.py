@@ -37,13 +37,11 @@ from esfunction import ESFunction
 from esvariable import ESVariable
 import estypesystem
 from symboltable import SymbolTable
-from tree import Tree
+from tree import Tree, TreeType
 
 
 class ASTTypeAnnotator(astwalker.ASTWalker):
 	def walkAST(self, ast, filename, sourcecode=''):
-		assert(ast.text == 'MODULESTART')
-
 		astwalker.ASTWalker.walkAST(self, ast, filename, sourcecode)
 
 		print ast.symbolTable
@@ -143,7 +141,8 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		# esType information is added by the caller
 
 		t = exprNode.copy(False) # copy line info
-		t.text = 'CAST'
+		t.type = TreeType.CAST
+		t.text = u'CAST'
 
 		t.addChild(exprNode.copy(True))
 		t.addChild(Tree(fromTypeName))
@@ -153,21 +152,18 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 
 	def _onModuleStart(self, ast):
-		assert(ast.text == 'MODULESTART')
-
 		self._moduleNode = ast
 		self._symbolTables = []
 		ast.symbolTable = None
 		ast.packageName = ''
 		ast.moduleName = None
 
-
 		# get package and module statements
 		idx = 0
-		if ast.children[0].text in ['package', 'module']:
+		if len(ast.children) > 0 and ast.children[0].type in [TreeType.PACKAGE, TreeType.MODULE]:
 			self._dispatch(ast.children[0])
 			idx += 1
-		if ast.children[1].text in ['package', 'module']:
+		if len(ast.children) > 1 and ast.children[1].type in [TreeType.PACKAGE, TreeType.MODULE]:
 			self._dispatch(ast.children[1])
 			idx += 1
 
@@ -188,23 +184,23 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		# import stuff
 		############################################
 		#for x in ast.children[idx:]:
-		#	if x.text in ['IMPORTALL']:
+		#	if x.type in [TreeType.IMPORTALL]:
 		#		self._dispatch(x)
 
 		############################################
 		# get global variables and functions
 		############################################
-		self._dispatchTable['DEFFUNC'] = '_onFuncPrototype'
+		default = self._dispatchTable[TreeType.DEFFUNC] = '_onFuncPrototype'
 		for x in ast.children:
-			if x.text == 'DEFFUNC':
+			if x.type == TreeType.DEFFUNC:
 				self._dispatch(x) # do not directly call _onFuncPrototype; _dispatch manages _nodes field
-		self._dispatchTable['DEFFUNC'] = '_onDefFunction'
+		self._dispatchTable[default] = default
 
 		############################################
 		# annotate the whole tree
 		############################################
 		for x in ast.children:
-			if x.text in u'package module IMPORTALL'.split():
+			if x.type in [TreeType.PACKAGE, TreeType.MODULE, TreeType.IMPORTALL]:
 				# already done
 				continue
 
@@ -213,21 +209,14 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 
 	def _onPackage(self, ast):
-		assert(ast.text == 'package')
-
 		self._moduleNode.packageName = ast.children[0].text
 
 
 	def _onModule(self, ast):
-		assert(ast.text == 'module')
-
 		self._moduleNode.moduleName = ast.children[0].text
 
 
 	def _onFuncPrototype(self, ast):
-		assert(ast.text == 'DEFFUNC')
-
-
 		modifiers = ast.children[0]
 		functionNameNode = ast.children[1]
 		functionName = functionNameNode.text
@@ -275,8 +264,6 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 
 	def _onDefFunction(self, ast):
-		assert(ast.text == 'DEFFUNC')
-
 		if len(ast.children) == 4:
 			# it's only a prototype
 			return
@@ -298,8 +285,6 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 
 	def _onBlock(self, ast):
-		assert(ast.text == 'BLOCK')
-
 		ast.symbolTable = SymbolTable() # do not use directly! use self._addSymbol etc.	
 
 		for x in ast.children:
@@ -307,12 +292,10 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 	
 	def _onPass(self, ast):
-		assert(ast.text == 'pass')
+		pass
 
 
 	def _onReturn(self, ast):
-		assert(ast.text == 'return')
-
 		# find enclosing function definion
 		esFunction = None
 		for n in reversed(self._nodes[:-1]):
@@ -348,14 +331,12 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 
 	def _onIntegerConstant(self, ast):
-		assert(ast.text == 'INTEGER_CONSTANT')
-
 		# FIXME really determine type of constant
 		ast.esType = self._findSymbol(name=u'int32', type_=ESType)
 
 
 	def _onBasicOperator(self, ast):
-		nodeType = ast.text
+		nodeType = ast.text # FIXME use ast.type
 		if ast.getChildCount() == 2 and nodeType in u'''* ** % / and xor or + - < <= == != >= >'''.split():
 			self._dispatch(ast.children[0])
 			self._dispatch(ast.children[1])
@@ -397,8 +378,6 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 
 	def _onCallFunc(self, ast):
-		assert(ast.text == 'CALLFUNC')
-
 		calleeNameNode = ast.children[0]
 		argNodes = ast.children[1:]
 
@@ -415,8 +394,6 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 
 	def _onVariable(self, ast):
-		assert(ast.text == 'VARIABLE')
-
 		varNameNode = ast.children[0]	
 
 
@@ -425,8 +402,6 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		ast.esType = s.esType
 
 	def _onAssert(self, ast):
-		assert(ast.text == 'assert')
-
 		self._dispatch(ast.children[0])
 
 		esType = ast.children[0].esType
@@ -437,8 +412,6 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			# TODO insert CAST node
 
 	def _onIf(self, ast):
-		assert(ast.text == 'if')
-
 		# dispatch all nodes
 		for x in ast.children:
 			self._dispatch(x)
@@ -456,8 +429,6 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 
 	def _onDefVariable(self, ast):
-		assert(ast.text == 'DEFVAR')
-
 		varNameNode = ast.children[0]
 		varTypeNameNode = ast.children[1]
 
@@ -489,8 +460,6 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 	
 	def _onAssign(self, ast):
-		assert(ast.text == '=')
-
 		varNameNode = ast.children[0]
 		exprNode = ast.children[1]
 
@@ -499,8 +468,6 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 
 	def _onListAssign(self, ast):
-		assert(ast.text == 'LISTASSIGN')
-
 		# semantics of list assign in cases where a variable is referenced on both sides:
 		# 1st copy results of ALL expressions into temporary variables
 		# 2nd copy content of temporary variables to destination variables
@@ -516,12 +483,10 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 
 	def _onFor(self, ast):
-		assert(ast.text == 'for')
-
 		ast.symbolTable = SymbolTable() # do not use directly!
 
 		varNameNode = ast.children[0]
-		assert(ast.children[1].text == 'range')
+		assert(ast.children[1].type == TreeType.RANGE)
 
 		rangeNode = ast.children[1]
 		blockNode = ast.children[2]
@@ -581,11 +546,9 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 
 	def _onBreak(self, ast):
-		assert(ast.text == 'break')
-
 		ok = False
 		for n in reversed(self._nodes):
-			if n.text in ['for', 'while']:# TODO add 'case' / 'switch'
+			if n.type in [TreeType.FOR, TreeType.WHILE]:# TODO add 'case' / 'switch'
 				ok = True
 				break
 
@@ -594,11 +557,9 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 
 	def _onContinue(self, ast):
-		assert(ast.text == 'continue')
-
 		ok = False
 		for n in reversed(self._nodes):
-			if n.text in ['for', 'while']:
+			if n.type in [TreeType.FOR, TreeType.WHILE]:
 				ok = True
 				break
 
@@ -607,8 +568,6 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 
 	def _onWhile(self, ast):
-		assert(ast.text == 'while')
-
 		exprNode = ast.children[0]
 		self._dispatch(exprNode)
 

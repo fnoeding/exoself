@@ -33,12 +33,12 @@ import setuppaths
 import antlr3
 from lexer import Lexer
 from parser import Parser
-from tree import Tree
+from tree import Tree, TreeType
 from desugar import desugar
 
 
 def antlrTree2Tree(antlrTree):
-	t = Tree(antlrTree.text, antlrTree.line, antlrTree.charPositionInLine)
+	t = Tree(antlrTree.type, antlrTree.text, antlrTree.line, antlrTree.charPositionInLine)
 
 	for i in range(antlrTree.getChildCount()):
 		subT = antlrTree2Tree(antlrTree.getChild(i))

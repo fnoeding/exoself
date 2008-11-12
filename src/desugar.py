@@ -29,11 +29,12 @@
 #
 
 
+from tree import Tree, TreeType
 
 
 
 def _desugarLoopElse(tree):
-	if not (tree.text == u'while' and len(tree.children) == 3):
+	if not (tree.type == TreeType.WHILE and len(tree.children) == 3):
 		return
 
 	# transform a (WHILE (expr blockBody blockElse)) to (IF (expr (BLOCK (WHILE (expr blockBody)) blockElse)))
@@ -47,16 +48,19 @@ def _desugarLoopElse(tree):
 
 	# create while node
 	tWhile = tree.copy(False)
+	tWhile.type = TreeType.WHILE
 	tWhile.text = u'while'
 	tWhile.addChild(tExprWhile)
 	tWhile.addChild(tBody)
 
 	# create block node
 	tBlock = tree.copy(False)
+	tBlock.type = TreeType.BLOCK
 	tBlock.text = u'BLOCK'
 	tBlock.addChild(tWhile)
 
 	# create if node in place
+	tree.type = TreeType.IF
 	tree.text = u'if'
 	tree.addChild(tExprIf)
 	tree.addChild(tBlock)
@@ -64,7 +68,7 @@ def _desugarLoopElse(tree):
 
 
 def _fixPackageAndModuleNames(tree):
-	if tree.text == u'package' or tree.text == u'IMPORTALL':
+	if tree.type == TreeType.PACKAGE or tree.type == TreeType.IMPORTALL:
 		newText = [x.text for x in tree.children]
 		del tree.children[1:]
 		tree.children[0].text = u''.join(newText)
@@ -103,6 +107,7 @@ def _desugarMultiAssign(tree):
 
 			for j in range(nNames - 2, -1, -1):# start with assignment on the right side working towards the left side
 				variableNode = c.copy(False)
+				variableNode.type = TreeType.VARIABLE
 				variableNode.text = u'VARIABLE'
 				variableNode.children = [nameNodes[j + 1].copy(True)]
 

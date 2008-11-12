@@ -28,13 +28,33 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 # 
 
+# store token types in a class
+class TreeType(object):
+	pass
+
+def _insertTokenIDs():
+	import setuppaths
+	import exoselfParser
+
+	for x in exoselfParser.tokenNames:
+		if x[0] == '<':
+			continue
+
+		id = eval('exoselfParser.%s' % x)
+		s = 'TreeType.%s = %d' % (x, id)
+
+		exec s
+_insertTokenIDs()
+
 
 
 class Tree(object):
 	''' internal tree type used for AST storage instead of the antlr tree type '''
-	def __init__(self, text, line=0, charPos=0):
+	def __init__(self, type, text, line=0, charPos=0):
+		assert(isinstance(type, int))
 		if not isinstance(text, unicode):
 			text = unicode(text)# TODO not really optimal...
+		self.type = type
 		self.text = text
 		self.children = []
 		self.line = line
@@ -51,7 +71,7 @@ class Tree(object):
 
 
 	def copy(self, copyChildren):
-		t = Tree(self.text, self.line, self.charPos)
+		t = Tree(self.type, self.text, self.line, self.charPos)
 
 		if copyChildren:
 			for x in self.children:

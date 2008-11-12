@@ -56,6 +56,7 @@ tokens {
 	LISTASSIGN;
 	FOREXPRESSION;
 	IMPORTALL;
+	CAST;// for now only used inside the compiler
 }
 
 
