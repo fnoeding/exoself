@@ -69,7 +69,19 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		return None
 
 
-	def _findSymbol(self, fromTree=None, name=None, type_=None):
+	def _findSymbol(self, **kwargs): # fromTree=None, name=None, type_=None
+		if 'name' in kwargs:
+			name = kwargs['name']
+			fromTree = None
+		else:
+			fromTree = kwargs['fromTree']
+			name = fromTree.text
+
+		if 'type_' in kwargs:
+			type_ = kwargs['type_']
+		else:
+			type_ = None
+
 		if name:
 			s = self._findSymbolHelper(name)
 		else:
@@ -83,8 +95,28 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		return s
 
 
-	def _addSymbol(self, name, symbol):
-		# add a symbol to the innermost symbol table
+	def _addSymbol(self, **kwargs): # fromTree=None, name=None, symbol=None
+		if 'name' in kwargs:
+			name = kwargs['name']
+			fromTree = None
+		else:
+			fromTree = kwargs['fromTree']
+			name = fromTree.text
+
+		symbol = kwargs['symbol']
+
+		# add a symbol to the innermost symbol table and makes sure that this symbol is unique
+		if not name:
+			name = fromTree.text
+
+		prevDef = self._findSymbolHelper(name)
+
+		if prevDef:
+			# can only overload / overwrite functions
+			if not isinstance(prevDef, list) or not isinstance(symbol, ESFunction):
+				self._raise(RecoverableCompileError, tree=fromTree, inlineText='symbol already defined')
+
+
 		for ast in reversed(self._nodes):
 			st = getattr(ast, 'symbolTable', None)
 			if not st:
@@ -136,9 +168,21 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		############################################
 		# get global variables and functions
 		############################################
+		self._dispatchTable['DEFFUNC'] = '_onFuncPrototype'
 		for x in ast.children:
 			if x.text == 'DEFFUNC':
-				self._onFuncPrototype(x)
+				self._dispatch(x) # do not directly call _onFuncPrototype; _dispatch manages _nodes field
+		self._dispatchTable['DEFFUNC'] = '_onDefFunction'
+
+		############################################
+		# annotate the whole tree
+		############################################
+		for x in ast.children:
+			if x.text in u'package module IMPORTALL'.split():
+				# already done
+				continue
+
+			self._dispatch(x)
 
 
 
@@ -159,7 +203,8 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 
 		modifiers = ast.children[0]
-		functionName = ast.children[1].text
+		functionNameNode = ast.children[1]
+		functionName = functionNameNode.text
 		returnTypeNode = ast.children[2]
 		parameters = ast.children[3]
 		# optional 5th part 'block' is not needed here
@@ -171,10 +216,10 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		parameterTypes = []
 		for i in range(len(parameters.children) // 2):
 			name = parameters.children[i * 2].text
-			typeName = parameters.children[i * 2 + 1].text
+			typeNameNode = parameters.children[i * 2 + 1]
 
 			parameterNames.append(name)
-			type_ = symbolTable.findSymbol(typeName)
+			type_ = self._findSymbol(fromTree=typeNameNode, type_=ESType)
 
 			parameterTypes.append(type_)
 
@@ -197,9 +242,32 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		
 
 		esFunction = ESFunction(functionName, functionType, parameterNames, mangling=mangling, linkage=linkage)
+		ast.esFunction = esFunction
 
 		# TODO check for duplicate entries
-		self._addSymbol(functionName, esFunction)
+		self._addSymbol(fromTree=functionNameNode, symbol=esFunction)
+
+
+	def _onDefFunction(self, ast):
+		assert(ast.text == 'DEFFUNC')
+
+		if len(ast.children) == 4:
+			# it's only a prototype
+			return
+
+		assert(len(ast.children) == 5)
+
+		# add a new symbol table and add entries for parameter names
+		ast.symbolTable = SymbolTable() # do not use directly! use self._addSymbol
+
+		esFunction = ast.esFunction
+		esParamTypes = esFunction.esType.getFunctionParameterTypes()
+		for i in range(len(esFunction.parameterNames)):
+			self._addSymbol(name=esFunction.parameterNames[i], symbol=esParamTypes[i])
+
+		# TODO
+		#blockNode = ast.children[4]
+		#self._dispatch(blockNode)
 
 	
 

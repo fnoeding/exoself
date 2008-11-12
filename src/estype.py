@@ -238,3 +238,21 @@ class ESType(object):
 			raise NotImplementedError('can not convert payload to LLVM type: %s' % self.payload)
 
 
+	def isFunction(self):
+		return self.payload[0] == 'function'
+
+	def getFunctionReturnTypes(self):
+		assert(self.isFunction())
+
+		n = self.payload[1]
+
+		return self.parents[:n]
+
+	def getFunctionParameterTypes(self):
+		assert(self.isFunction())
+
+		n = self.payload[1]
+
+		return self.parents[n:]
+
+
