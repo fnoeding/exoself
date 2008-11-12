@@ -52,9 +52,22 @@ def _buildImplicitConversionsTable():
 		l.append(elementaryTypes[x])
 	implicitConversions[elementaryTypes[u'bool']] = l
 
+	# int8 to other
+	l = []
+	for x in u'bool int16 int32 int64 single double'.split():
+		l.append(elementaryTypes[x])
+	implicitConversions[elementaryTypes[u'int8']] = l
+
+	# int16 to other
+	l = []
+	for x in u'bool int32 int64 single double'.split():
+		l.append(elementaryTypes[x])
+	implicitConversions[elementaryTypes[u'int16']] = l
+
+
 	# int32 to other
 	l = []
-	for x in u'bool int64'.split():
+	for x in u'bool int64 double'.split():# add single? that loses some precision but is at least consistent with the rules for int8, int16
 		l.append(elementaryTypes[x])
 	implicitConversions[elementaryTypes[u'int32']] = l
 

@@ -38,36 +38,7 @@ class ASTWalker(object):
 	def __init__(self):
 		dt = {}
 		self._dispatchTable = dt
-		self._ignoreUnknownNodes = False
 		self._nodes = [] # contains a list of all nodes starting with root node to current node; maintained by _dispatch
-
-		tt = TreeType
-		dt[tt.MODULESTART] = '_onModuleStart'
-		dt[tt.PACKAGE] = '_onPackage'
-		dt[tt.MODULE] = '_onModule'
-		dt[tt.IMPORTALL] = '_onImportAll'
-		dt[tt.DEFFUNC] = '_onDefFunction'
-		dt[tt.BLOCK] = '_onBlock'
-		dt[tt.PASS] = '_onPass'
-		dt[tt.RETURN] = '_onReturn'
-		dt[tt.ASSERT] = '_onAssert'
-		dt[tt.IF] = '_onIf'
-		dt[tt.FOR] = '_onFor'
-		dt[tt.WHILE] = '_onWhile'
-		dt[tt.BREAK] = '_onBreak'
-		dt[tt.CONTINUE] = '_onContinue'
-		dt[tt.INTEGER_CONSTANT] = '_onIntegerConstant'
-		dt[tt.FLOAT_CONSTANT] = '_onFloatConstant'
-		dt[tt.CALLFUNC] = '_onCallFunc'
-		dt[tt.VARIABLE] = '_onVariable'
-		dt[tt.DEFVAR] = '_onDefVariable'
-		dt[tt.ASSIGN] = '_onAssign'
-		dt[tt.LISTASSIGN] = '_onListAssign'
-
-		for x in [tt.PLUS, tt.MINUS, tt.STAR, tt.DOUBLESTAR, tt.SLASH, tt.PERCENT,
-				tt.NOT, tt.AND, tt.OR, tt.XOR,
-				tt.LESS, tt.LESSEQUAL, tt.EQUAL, tt.NOTEQUAL, tt.GREATEREQUAL, tt.GREATER]:
-			dt[x] = '_onBasicOperator'
 
 
 
@@ -83,17 +54,65 @@ class ASTWalker(object):
 
 
 	def _dispatch(self, ast):
-		calleeName = self._dispatchTable[ast.type]
-		callee = getattr(self, calleeName, None)
+		tt = TreeType
+		kwargs = {}
+		kwargs['ast'] = ast
+		callee = None
 
-		if not callee and self._ignoreUnknownNodes:
-			return None
-		elif not callee:
-			raise AssertionError('handler for ast node not implemented: %s / %s' % (ast.type, calleeName))
-		
+		t = ast.type
+
+		if t == tt.MODULESTART:
+			callee = self._onModuleStart
+		elif t == tt.PACKAGE:
+			callee = self._onPackage
+		elif t == tt.MODULE:
+			callee = self._onModule
+		elif t == tt.IMPORTALL:
+			callee = self._onImportAll
+		elif t == tt.DEFFUNC:
+			callee = self._onDefFunction
+		elif t == tt.BLOCK:
+			callee = self._onBlock
+		elif t == tt.PASS:
+			callee = self._onPass
+		elif t == tt.RETURN:
+			callee = self._onReturn
+		elif t == tt.ASSERT:
+			callee = self._onAssert
+		elif t == tt.IF:
+			callee = self._onIf
+		elif t == tt.FOR:
+			callee = self._onFor
+		elif t == tt.WHILE:
+			callee = self._onWhile
+		elif t == tt.BREAK:
+			callee = self._onBreak
+		elif t == tt.CONTINUE:
+			callee = self._onContinue
+		elif t == tt.INTEGER_CONSTANT:
+			callee = self._onIntegerConstant
+		elif t == tt.FLOAT_CONSTANT:
+			callee = self._onFloatConstant
+		elif t == tt.CALLFUNC:
+			callee = self._onCallFunc
+		elif t == tt.VARIABLE:
+			callee = self._onVariable
+		elif t == tt.DEFVAR:
+			callee = self._onDefVariable
+		elif t == tt.ASSIGN:
+			callee = self._onAssign
+		elif t == tt.LISTASSIGN:
+			callee = self._onListAssign
+		elif t in [tt.PLUS, tt.MINUS, tt.STAR, tt.DOUBLESTAR, tt.SLASH, tt.PERCENT,
+				tt.NOT, tt.AND, tt.OR, tt.XOR,
+				tt.LESS, tt.LESSEQUAL, tt.EQUAL, tt.NOTEQUAL, tt.GREATEREQUAL, tt.GREATER]:
+			callee = self._onBasicOperator
+		else:
+			assert(0 and 'dead code path / support for new token type not implemented')
+
 		self._nodes.append(ast)
 		try:
-			return callee(ast)
+			return callee(**kwargs)
 		finally:
 			self._nodes.pop()
 

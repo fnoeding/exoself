@@ -190,11 +190,12 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		############################################
 		# get global variables and functions
 		############################################
-		default = self._dispatchTable[TreeType.DEFFUNC] = '_onFuncPrototype'
+		old = self._onDefFunction
+		self._onDefFunction = self._onFuncPrototype
 		for x in ast.children:
 			if x.type == TreeType.DEFFUNC:
 				self._dispatch(x) # do not directly call _onFuncPrototype; _dispatch manages _nodes field
-		self._dispatchTable[default] = default
+		self._onDefFunction = old
 
 		############################################
 		# annotate the whole tree
