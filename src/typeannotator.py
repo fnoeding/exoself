@@ -622,8 +622,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			# TODO add cast node
 
 
-		for x in ast.children[1:]:
-			self._dispatch(x)
+		self._dispatch(ast.children[1])
 
 
 
