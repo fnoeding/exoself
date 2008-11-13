@@ -44,6 +44,7 @@ class ESFunction(object):
 		self.package = package
 		self.module = module
 		self.parameterNames = paramNames
+		# the llvm backend adds a member llvmRef here
 
 		if not mangling:
 			mangling = 'default'

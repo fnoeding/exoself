@@ -61,6 +61,9 @@ def runExoself(filebase, opts, quiet=False, expectCompileError=False):
 		return False
 
 	if p.returncode != 0:
+		if not quiet:
+			print d
+			print d2
 		return False
 
 	return True

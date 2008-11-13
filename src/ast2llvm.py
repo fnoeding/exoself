@@ -39,19 +39,15 @@ import os.path
 import re
 
 from mangle import *
-from scopestack import ScopeStack, ScopeStackWithProxy
 from typesystem import *
 from esfunction import ESFunction
 from esvalue import ESValue
 from esvariable import ESVariable
-from estype import ESTypeOld as ESType
+from estype import ESType
 from errors import *
 import astwalker
-
-def _childrenIterator(tree):
-	n = tree.getChildCount()
-	for i in range(n):
-		yield tree.getChild(i)
+from tree import Tree, TreeType
+import typeannotator
 
 
 
@@ -59,31 +55,38 @@ def _childrenIterator(tree):
 
 
 class ModuleTranslator(astwalker.ASTWalker):
-
-
 	def _addHelperFunctionsPreTranslation(self):
-		# puts
-		retType= Type.int(32)
-		parameterTypes = []
-		parameterTypes.append(Type.pointer(Type.int(8)))
-		functionType = Type.function(retType, parameterTypes)
-		func = self._module.add_function(functionType, 'puts')
-		self._scopeStack.add('puts', ESFunction(func, ESType(u'int32'), [ESType(u'pointer(int8)')])) # FIXME how to represent pointer types?
+		# int puts(char *);
+		returnTypes = [self._findSymbol(name=u'int32', type_=ESType)]
+		paramTypes = [self._findSymbol(name=u'int8', type_=ESType).derivePointer()]
+		esType = ESType.createFunction(returnTypes, paramTypes)
+		esFunc = ESFunction(u'puts', '', '', esType, [u's'], mangling='C', linkage='extern')
+		self._addSymbol(name=u'puts', symbol=esFunc)
+		type = esType.toLLVMType()
+		func = self._module.add_function(type, 'puts')
 
-		# abort
-		functionType = Type.function(Type.void(), [])
-		func = self._module.add_function(functionType, 'abort')
-		self._scopeStack.add('abort', ESFunction(func, ESType(u'void'), []))
+
+		# void abort();
+		returnTypes = [self._findSymbol(name=u'void', type_=ESType)]
+		paramTypes = []
+		esType = ESType.createFunction(returnTypes, paramTypes)
+		esFunc = ESFunction(u'abort', '', '', esType, [], mangling='C', linkage='extern')
+		type = esType.toLLVMType()
+		func = self._module.add_function(type, 'abort')
+
 
 
 	def _addHelperFunctionsPostTranslation(self):
 		# if this module contains a main function emit code which will call it
 
-		flist = self._scopeStack.find('main')
+		try:
+			flist = self._findSymbol(name=u'main', type_=ESFunction)
+		except CompileError:
+			flist = []
 
-		if flist:# other checks prevent flist being longer than 1 element
-			# generate code too call main
-			mainFunc = flist[0]
+		if flist:
+			assert(len(flist) == 1)
+			esMain = flist[0]
 
 			s = []
 			s.append('The main function defined in this module has an unsupported signature.')
@@ -91,14 +94,22 @@ class ModuleTranslator(astwalker.ASTWalker):
 			s.append('\tdef main() as int32')
 			s.append('\tdef main() as void')
 
+			int32 = self._findSymbol(name=u'int32', type_=ESType)
+			void = self._findSymbol(name=u'void', type_=ESType)
+			validA = ESType.createFunction([int32], [])
+			validB = ESType.createFunction([void], [])
 
-			# incompatible return type?
-			retType = mainFunc.llvmType.pointee.return_type
-			if retType != Type.void() and retType != Type.int(32):
+			ok = False
+			for x in [validA, validB]:
+				if x.isEquivalentTo(esMain.esType, False):
+					ok = True
+
+			if not ok:
 				self._raiseException(RecoverableCompileError, postText=s)
 
+
 			# has arguments?
-			if len(mainFunc.llvmFunc.args) == 0:
+			if len(esMain.esType.getFunctionParameterTypes()) == 0:
 				functionType= Type.function(Type.int(32), [])
 				function = self._module.add_function(functionType, 'main')
 
@@ -109,9 +120,12 @@ class ModuleTranslator(astwalker.ASTWalker):
 				b.branch(BB)
 
 				b = Builder.new(BB)
-				r = b.call(mainFunc.llvmFunc, [])
+				r = b.call(esMain.llvmRef, [])
 
-				if retType != Type.void():
+				retTypes = esMain.esType.getFunctionReturnTypes()
+				assert(len(retTypes) == 1)
+
+				if retTypes[0].toLLVMType() != Type.void():
 					b.ret(r)
 				else:
 					b.ret(Constant.int(Type.int(32), 0))
@@ -121,64 +135,18 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 
 
-
-
-
-	def _onModuleStart(self, tree):
-		assert(tree.text == 'MODULESTART')
-
+	def _onModuleStart(self, ast, packageName, moduleName, statements):
 		self._errors = 0
 		self._warnings = 0
 
-		self._module = Module.new('main_module')
-		self._scopeStack = ScopeStack() # used to resolve variables
-		self._breakTargets = [] # every loop pushes / pops basic blocks onto this stack for usage by break.
-		self._continueTargets = [] # see breakTargets
-
-		self._moduleName = os.path.split(self._filename)[1] 
-		self._packageName = ''
-
-		# add some basic types
-		basicTypes = u'void bool int8 int16 int32 int64'.split()
-		for x in basicTypes:
-			self._scopeStack.add(x, ESType(x))
-
-		# first pass: process package and module statements
-		# if these statements exist they are the first two
-		for x in tree.children[:2]:
-			if x.text in ['package', 'module']:
-				self._dispatch(x)
-
-		# make sure package and module names are valid
-		m = re.match('[a-zA-Z_][a-zA-Z_0-9]*', self._moduleName)
-		bad = True
-		if m and m.span() == (0, len(self._moduleName)):
-			bad = False
-		if bad:
-			self._raiseException(CompileError, postText='Module filenames should begin with alpha character or underscore otherwise it\'s not possible to import them. To disable this error message set a valid module name using the \'module\' statement.')
+		self._module = Module.new(ast.moduleName)
+		self._moduleNode = ast
 
 		# add some helper functions / prototypes / ... to the module
 		self._addHelperFunctionsPreTranslation()
 
-		# second pass: make all functions available, so we don't need any stupid forward declarations
-		for x in _childrenIterator(tree):
-			try:
-				if x.text == 'DEFFUNC':
-					self._onDefProtoype(x)
-			except RecoverableCompileError, e:
-				print e.message.rstrip()
-				self._errors += 1
-			except CompileError, e:
-				print e.message.rstrip()
-				self._errors += 1
-				break
-
-		if self._errors:
-			raise CompileError('errors occured during checking global statements: aborting')
-
-
-		# third pass: translate code
-		for x in _childrenIterator(tree):
+		# translate
+		for x in statements:
 			try:
 				self._dispatch(x)
 			except RecoverableCompileError, e:
@@ -188,311 +156,114 @@ class ModuleTranslator(astwalker.ASTWalker):
 				print e.message.rstrip()
 				self._errors += 1
 				break
+
 		if self._errors:
 			raise CompileError('errors occured during compilation: aborting')
+
 
 		# finally add some more helper functions / prototypes / ... to the module
 		self._addHelperFunctionsPostTranslation()
 
 
-	def _onPackage(self, tree):
-		assert(tree.text == 'package')
 
-		self._packageName = tree.children[0].text
-
-	def _onModule(self, tree):
-		assert(tree.text == 'module')
-
-		self._moduleName = tree.children[0].text
+	def _onImportAll(self, ast, moduleName):
+		pass
 
 
-	def _onImportAll(self, tree):
-		assert(tree.text == 'IMPORTALL')
-		assert(os.path.isabs(self._filename)) # also checked in translateAST, but be really sure
 
+	def _onDefFunction(self, ast, modifierKeys, modifierValues, name, returnTypeName, parameterNames, parameterTypeNames, block):
+		esFunction = ast.esFunction
+		esType = esFunction.esType
 
-		# get path to other module
-		modPath = tree.getChild(0).text	
-		if modPath.startswith('.'):
-			modPath = modPath.split('.')
-			if modPath[0] == '':
-				modPath.pop(0)
-			
-			path, ignored = os.path.split(self._filename)
-			for i in range(len(modPath)):
-				if modPath[i] != '':
-					break
-
-				path, ignored = os.path.split(path)
-			toImport = os.path.join(path, *modPath[i:]) + '.es'
+		if esFunction.name == 'main':# a user defined main gets called by a compiler defined main function
+			mangledName = '__ES_main'
+		elif modMangling == 'C':
+			mangledName = esFunction.name
 		else:
-			raise NotImplementedError('absolute imports are not supported, yet')
+			mangledName = mangleFunction(esFunction.package, esFunction.module, esFunction.name,
+					['void'], # FIXME
+					[]) #FIXME
 
-		if not os.path.exists(toImport):
-			s1 = 'can not find module'
-			s2 = 'file does not exist: %s' % toImport
-			self._raiseException(RecoverableCompileError, tree=tree.getChild(0), inlineText=s1, postText=s2)
-
-		# load data
-		f = file(toImport, 'rt')
-		toImportData = f.read()
-		f.close()
-
-
-		# tricky part:
-		#     translate module to AST
-		#     use *another* module translator to translate the module
-		#         recurse, if necessary
-		#     export symbols
-		#     insert symbols in our module
-
-		# FIXME possible infinite recursion: circular dependencies are not detected
-		# FIXME very inefficient:
-		#     ideally first a dependency graph is generated
-		#     this can be used by any make like tool to instruct the compiler to generate (precompiled???) headers
-		#     the headers can be parsed much faster
-		#     additionally we should maintain an internal list of already parsed modules
-		from source2ast import sourcecode2AST
-
-		numErrors, ast = sourcecode2AST(toImportData)
-		if numErrors:
-			self._raiseException(CompileError, tree=tree.children[0], inlineText='module contains errors')
-
-		mt = ModuleTranslator()
-		mt.translateAST(ast, toImport, toImportData)
-		d = mt._exportGloballyVisibleSymbols()
+		try:
+			# make really sure there is no function with this name
+			if self._module.get_function_named(mangledName):
+				nameUsed = True
+		except:
+			nameUsed = False
+		if nameUsed:
+			s1 = 'mangled name already in use: %s' % mangledName
+			s2 ='internal compiler error: name mangling probably not working correctly. Please submit bug report.'
+			self._raiseException(CompileError, tree=tree.getChild(1), inlineText=s1, postText=s2)
 
 
-		# many strange things can happen here
-		# assume a user has two modules with the same package names, same module names
-		# and then defines in both modules a function
-		#     def f() as int32;
-		# but with different bodies. Now both function get the same mangled name and we have no idea which one to use...
-		# At least this case will generate a linker error
-		for x in d['functions']:
-			try:
-				self._module.get_function_named(x['mangledName'])
-				mangledName = True
-			except:
-				mangledName = False
+		llvmRef = self._module.add_function(esType.toLLVMType(), mangledName)
+		esFunction.llvmRef = llvmRef
 
-			if not mangledName:
-				func = self._module.add_function(x['llvmType'].pointee, x['mangledName'])
-				esFunc = ESFunction(func, x['function'].returnType, x['function'].paramTypes)
-				self._scopeStack.add(x['name'], esFunc)
-			else:
-				# check that types match
-				blockers = self._scopeStack.find(x['name']) # FIXME is this really enough? maybe we should scan all functions to get the offending one
-				match = False
-				for b in blockers:
-					if b.llvmType == x['llvmType']: # enough? use ESType based checks?
-						match = True
-
-				if not match:
-					# that's bad! That means self._scopeStack.find(x['name']) is not enough to find all offenders!
-					# maybe another bug, too...
-					s1 = 'module caused internal error'
-					s2 = ['imported module contains a function with the same mangled name as a function in the current module']
-					s2.append('name: %s; mangled name: %s' % (x['name'], x['mangledName']))
-					s2.append('Internal compiler error. Please submit a bug report.')
-					s2 = '\n'.join(s2)
-					self._raiseException(CompileError, tree=tree.children[0], inlineText=s1, postText=s2)
+		# set parameter names
+		for i,x in enumerate(parameterNames):
+			llvmFunc.args[i].name = x.text
 
 
-		# TODO import other symbols, types, etc
-
-
-
-
-	def _onDefProtoype(self, tree):
-		# this function also gets called for functions definitions and should then only generate a prototype
-		assert(tree.text == 'DEFFUNC')
-
-
-		ci = _childrenIterator(tree)
-		modifiers = ci.next()
-		name = ci.next().text
-		returnTypeName = ci.next().text
-		argList = ci.next()
-
-		returnType = self._scopeStack.findType(returnTypeName)
-		if not returnType:
-			self._raiseException(RecoverableCompileError, tree=tree.children[2], inlineText='unknown type')
-
-
-		functionParamTypes = []
-		functionParamTypeNames = []
-		functionParamNames = []
-		for i in range(argList.getChildCount() / 2):
-			argName = argList.getChild(i * 2).text
-			argTypeName = argList.getChild(i * 2 + 1).text
-
-			argType = self._scopeStack.findType(argTypeName)
-			if not argType:
-				self._raiseException(RecoverableCompileError, tree=argList.children[2 * i + 1], inlineText='unknown type')
-
-			functionParamTypes.append(argType)
-			functionParamTypeNames.append(argTypeName)
-			functionParamNames.append(argName)
-
-
-		funcProto = Type.function(returnType.llvmType, [x.llvmType for x in functionParamTypes])
-
-		# parse modifiers
-		modMangling = 'default'
-		for i in range(modifiers.getChildCount() / 2):
-			key = modifiers.children[2 * i].text
-			value = modifiers.children[2 * i + 1].text
-
-			# TODO implement better checking, duplicate keys etc.
-
-			if key == 'mangling':
-				if value not in ['C', 'default']:
-					self._raiseException(RecoverableCompileError, tree=tree.children[2 * i + 1], inlineText='unknown function modifier')
-				modMangling = value
-			else:
-				self._raiseException(RecoverableCompileError, tree=tree.children[2 * i], inlineText='unknown function modifier')
-
-
-		# was there already a function with this name?
-		# check according to overload rules if everything is ok with this declaration
-		functionsWithThisName = self._scopeStack.find(name)
-
-		func = None
-		if functionsWithThisName:
-			for other in functionsWithThisName:
-				# TODO think about limitations of overloading
-
-				# check that a function is not defined several times using the same (returnType, paramterTypes)
-				if other.llvmType.pointee == funcProto:# FIXME use ESType based checking?
-					func = other
-					break
-
-		if not func:
-			if name == 'main':# a user defined main gets called by a compiler defined main function
-				mangledName = '__ES_main'
-			elif modMangling == 'C':
-				mangledName = name
-			else:
-				mangledName = mangleFunction(self._packageName, self._moduleName, name, returnTypeName, functionParamTypeNames)
-
-			# a function with a matching signature was not found
-			try:
-				# make really sure there is no function with this name
-				if self._module.get_function_named(mangledName):
-					nameUsed = True
-			except:
-				nameUsed = False
-			if nameUsed:
-				s1 = 'mangled name already in use: %s' % mangledName
-				s2 ='internal compiler error: name mangling probably not working correctly. Please submit bug report.'
-				self._raiseException(CompileError, tree=tree.getChild(1), inlineText=s1, postText=s2)
-
-
-			llvmFunc = self._module.add_function(funcProto, mangledName)
-			
-			for i,x in enumerate(functionParamNames):
-				llvmFunc.args[i].name = x # name is always a str, not a unicode...
-
-			# add function name to scope
-			func = ESFunction(llvmFunc, returnType, functionParamTypes)
-			self._scopeStack.add(name, func)
-
-		assert(isinstance(func, ESFunction))
-		return func
-
-		# add function
-		#if oldFunc:
-		#	# compare types
-		#	if oldFunc.type.pointee != funcProto:
-		#		s = 'expected type: %s' % oldFunc.type.pointee
-		#		self._raiseException(RecoverableCompileError, tree=tree, inlineText='prototype does not match earlier declaration / definition', postText=s)
-
-		#	# TODO compare more?
-		#	# maybe add argument names if they were omitted previously?
-		#else:
+		if not block:
+			# only a prototype
+			return
 
 	
-
-	def _onDefFunction(self, tree):
-		assert(tree.text == 'DEFFUNC')
-
-		ci = _childrenIterator(tree)
-		modifiers = ci.next().text
-		name = ci.next().text
-		returnType = ci.next().text
-		argList = ci.next()
-
-		func = self._onDefProtoype(tree)
-
-		# differentiate between declarations and definitions
-		if tree.getChildCount() == 4:
-			# declaration
-			return
-		assert(tree.getChild(4).text == 'BLOCK')
-
-		with ScopeStackWithProxy(self._scopeStack):
-
-			self._currentFunction = func
-			entryBB = func.llvmFunc.append_basic_block('entry')
-
-			# add variables
-			for i in range(len(func.llvmFunc.args)):
-				self._createAllocaForVar(unicode(func.llvmFunc.args[i].name), func.llvmFunc.args[i].type, func.paramTypes[i].typename, func.llvmFunc.args[i], treeForErrorReporting=tree)
+		entryBB = llvmRef.append_basic_block('entry')
+		bEntry = Builder.new(entryBB)
 
 
-			addedBRToEntryBB = False
-			for x in ci:
-				currentBB = func.llvmFunc.append_basic_block('bb')
-				self._currentBuilder = Builder.new(currentBB)
+		# add variables
+		# TODO
+		#	for i in range(len(func.llvmFunc.args)):
+		#		self._createAllocaForVar(unicode(func.llvmFunc.args[i].name), func.llvmFunc.args[i].type, func.paramTypes[i].typename, func.llvmFunc.args[i], treeForErrorReporting=tree)
 
-				if not addedBRToEntryBB:
-					b = Builder.new(entryBB)
-					b.branch(currentBB)
-					addedBRToEntryBB = True
+		bb = llvmRef.append_basic_block('bb')
+		bEntry.branch(bb)
 
-				self._onBlock(x)
+		self._currentBuilder = Builder.new(bb)
+		self._dispatch(block)
 
-			if returnType == 'void':
-				self._currentBuilder.ret_void()
-			else:
-				currentBB = self._currentBuilder.block
-				if not (currentBB.instructions and currentBB.instructions[-1].is_terminator):
-					lastChild = tree.getChild(tree.getChildCount() - 1)
-					s = self._generateContext(preText='warning:', postText='control flow possibly reaches end of non-void function. Inserting trap instruction...', lineBase1=lastChild.line, numAfter=3)
-					print s
-					trapFunc = Function.intrinsic(self._module, INTR_TRAP, []);
-					self._currentBuilder.call(trapFunc, [])
-					self._currentBuilder.ret(Constant.int(Type.int(32), -1)) # and return, otherwise func.verify will fail
-					
+		returnTypes = esFunction.esType.getFunctionReturnTypes()
+		if len(returnTypes) == 1 and returnTypes[0].toLLVMType() == Type.void():
+			self._currentBuilder.ret_void()
+		else:
+			bb = self._currentBuilder.block
+			if not (bb.instructions and bb.instructions[-1].is_terminator):
+				s = self._generateContext(preText='warning:', postText='control flow possibly reaches end of non-void function. Inserting trap instruction...', lineBase1=block.line, numAfter=3)
+				print s
+				trapFunc = Function.intrinsic(self._module, INTR_TRAP, []);
+				self._currentBuilder.call(trapFunc, [])
+				self._currentBuilder.ret(Constant.int(Type.int(32), -1)) # and return, otherwise func.verify will fail
+				
 				
 
-			func.llvmFunc.verify()
+		llvmRef.verify()
 
 
-	def _onBlock(self, tree):
-		assert(tree.text == 'BLOCK')
-
-		with ScopeStackWithProxy(self._scopeStack):
-			for x in _childrenIterator(tree):
-				self._dispatch(x)
+	def _onBlock(self, ast, blockContent):
+		for x in blockContent:
+			self._dispatch(x)
 
 
 
-	def _onReturn(self, tree):
-		assert(tree.text == 'return')
+	def _onReturn(self, ast, expressions):
+		esFunction = None
+		for n in reversed(self._nodes):
+			if n.type == TreeType.DEFFUNC:
+				esFunction = n.esFunction
+				break
+		assert(esFunction)
 
-		if self._currentFunction.returnType.typename == u'void':
-			if tree.getChildCount() != 0:
-				self._raiseException(RecoverableCompileError, tree=tree.children[0], inlineText='this function has no return value')
-
-		esValue = self._dispatch(tree.getChild(0))
-
-		expectedRetType = self._currentFunction.llvmType.pointee.return_type
-		if esValue.llvmType != expectedRetType:
-			esValue = self._convertType(esValue, self._currentFunction.returnType.typename)
-
-		self._currentBuilder.ret(esValue.llvmValue)
+		returnTypes = esFunction.esType.getFunctionReturnTypes()
+		assert(len(returnTypes) == 1)
+		if returnTypes[0].toLLVMType() == Type.void():
+			assert(not expressions)
+			self._currentBuilder.ret_void()
+		else:
+			self._dispatch(expressions[0])
+			llvmValue = expressions[0].llvmValue
+			self._currentBuilder.ret(llvmValue)
 
 	def _onAssert(self, tree):
 		assert(tree.text == 'assert')
@@ -740,14 +511,11 @@ class ModuleTranslator(astwalker.ASTWalker):
 		self._currentBuilder.branch(self._continueTargets[-1])
 		
 
-	def _onPass(self, tree):
-		assert(tree.text == 'pass')
-		# nothing to do here
+	def _onPass(self, ast):
+		pass
 
-	def _onIntegerConstant(self, tree):
-		assert(tree.text == 'INTEGER_CONSTANT')
-
-		value = tree.getChild(0).text.replace('_', '').lower()
+	def _onIntegerConstant(self, ast, constant):
+		value = constant.text.replace('_', '').lower()
 
 		if value.startswith('0x'):
 			i = int(value[2:], 16)
@@ -758,7 +526,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 		else:
 			i = int(value)
 
-		# TODO move this into ESIntegerType?
+		# TODO think a bit more about default types
 		signed = True # TODO
 		if -(2 ** 7) <= i <= 2 ** 7 - 1:
 			bits = 8
@@ -769,17 +537,17 @@ class ModuleTranslator(astwalker.ASTWalker):
 		elif -(2 ** 63) <= i <= 2 ** 63 - 1:
 			bits = 64
 		else:
-			self._raiseException(RecoverableCompileError, tree=tree.children[0], inlineText='constant can not be represented by an int64')
+			self._raiseException(RecoverableCompileError, tree=constant, inlineText='constant can not be represented by an int64')
 
 		# FIXME TODO think about a default type. int8 is somewhat inconvenient as a default type...
-		# for now just use int32 that works on every x86 / x86_84 etc.
+		# for now just use int32 that works on every x86 / x86_64 etc.
 		if bits < 32:
 			bits = 32
 		
 		c = Constant.int(Type.int(bits), i)
-		v = ESValue(c, u'int%d' % bits)
 
-		return v
+		ast.llvmValue = c
+
 
 
 	def _onFloatConstant(self, tree):
@@ -1104,11 +872,11 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 
 
-	def translateAST(self, tree, absFilename, sourcecode=''):
-		assert(tree.text == 'MODULESTART')
+	def walkAST(self, ast, absFilename, sourcecode=''):
+		assert(ast.type == TreeType.MODULESTART)
 
 		self._module = None
-		self.walkAST(tree, absFilename, sourcecode)
+		astwalker.ASTWalker.walkAST(self, ast, absFilename, sourcecode)
 
 		self._module.verify()
 

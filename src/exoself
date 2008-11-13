@@ -38,7 +38,7 @@ from optparse import OptionParser, OptionGroup
 
 from errors import CompileError, RecoverableCompileError
 from source2ast import sourcecode2AST, AST2StringAST, AST2DOT, AST2PNG, AST2StringAST
-#from ast2llvm import ModuleTranslator
+from ast2llvm import ModuleTranslator
 from typeannotator import ASTTypeAnnotator
 
 import llvm
@@ -120,7 +120,7 @@ def main():
 	# build AST
 	numErrors, ast = sourcecode2AST(source)
 	if numErrors:
-		print 'aborting, %d errors occured' % numErrors
+		print '%d errors occured\naborting' % numErrors
 		return 1
 	if options.saveTemps or options.astOnly:
 		f = file('%s.ast' % baseFN, 'wt')
@@ -137,9 +137,6 @@ def main():
 		f.write(AST2PNG(ast))
 		f.close()
 		
-	if options.astOnly:
-		return 0
-
 	# annotate ast
 	ta = ASTTypeAnnotator()
 	try:
@@ -149,13 +146,14 @@ def main():
 		print 'aborting'
 		return 1
 
-	return # FIXME
+	if options.astOnly:
+		return 0
 
 
 	# build llvm IR
 	mt = ModuleTranslator()
 	try:
-		module = mt.translateAST(ast, fn, source)
+		module = mt.walkAST(ast, fn, source)
 	except CompileError, e:
 		print e.message.rstrip()
 		print 'aborting'
