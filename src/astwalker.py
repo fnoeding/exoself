@@ -71,17 +71,17 @@ class ASTWalker(object):
 			idx = 0
 			for i in range(n):
 				if ast.children[i].type == tt.PACKAGE:
-					packageName = ast.children[i]
+					packageName = ast.children[i].children[0]
 					idx += 1
 				elif ast.children[i].type == tt.MODULE:
-					moduleName = ast.children[i]
+					moduleName = ast.children[i].children[0]
 					idx += 1
 			kwargs['statements'] = ast.children[idx:]
 			kwargs['packageName'] = packageName
 			kwargs['moduleName'] = moduleName
 		elif t == tt.IMPORTALL:
-			# TODO
 			callee = self._onImportAll
+			kwargs['moduleName'] = ast.children[0]
 		elif t == tt.DEFFUNC:
 			callee = self._onDefFunction
 

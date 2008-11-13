@@ -36,9 +36,9 @@ import os
 import sys
 from optparse import OptionParser, OptionGroup
 
-
+from errors import CompileError, RecoverableCompileError
 from source2ast import sourcecode2AST, AST2StringAST, AST2DOT, AST2PNG, AST2StringAST
-#from ast2llvm import ModuleTranslator, CompileError, RecoverableCompileError
+#from ast2llvm import ModuleTranslator
 from typeannotator import ASTTypeAnnotator
 
 import llvm
@@ -142,7 +142,12 @@ def main():
 
 	# annotate ast
 	ta = ASTTypeAnnotator()
-	ta.walkAST(ast, fn, source)
+	try:
+		ta.walkAST(ast, fn, source)
+	except CompileError, e:
+		print e.message.rstrip()
+		print 'aborting'
+		return 1
 
 	return # FIXME
 
@@ -153,6 +158,7 @@ def main():
 		module = mt.translateAST(ast, fn, source)
 	except CompileError, e:
 		print e.message.rstrip()
+		print 'aborting'
 		return 1
 
 	# optimize IR

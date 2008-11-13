@@ -44,7 +44,6 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 	def walkAST(self, ast, filename, sourcecode=''):
 		astwalker.ASTWalker.walkAST(self, ast, filename, sourcecode)
 
-		print ast.symbolTable
 
 
 	def _initModuleSymbolTable(self):
@@ -182,9 +181,9 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		############################################
 		# import stuff
 		############################################
-		#for x in statements:
-		#	if x.type in [TreeType.IMPORTALL]:
-		#		self._dispatch(x)
+		for x in statements:
+			if x.type in [TreeType.IMPORTALL]:
+				self._dispatch(x)
 
 		############################################
 		# get global variables and functions
@@ -205,6 +204,81 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 				continue
 
 			self._dispatch(x)
+
+	def _onImportAll(self, ast, moduleName):
+		assert(os.path.isabs(self._filename))
+
+		# get path to other module
+		modPath = moduleName.text	
+		if modPath.startswith('.'):
+			modPath = modPath.split('.')
+			if modPath[0] == '':
+				modPath.pop(0)
+			
+			path, ignored = os.path.split(self._filename)
+			for i in range(len(modPath)):
+				if modPath[i] != '':
+					break
+
+				path, ignored = os.path.split(path)
+			toImport = os.path.join(path, *modPath[i:]) + '.es'
+		else:
+			raise NotImplementedError('absolute imports are not supported, yet')
+
+		if not os.path.exists(toImport):
+			s1 = 'can not find module'
+			s2 = 'file does not exist: %s' % toImport
+			self._raiseException(RecoverableCompileError, tree=moduleName, inlineText=s1, postText=s2)
+
+		# load data
+		f = file(toImport, 'rt')
+		toImportData = f.read()
+		f.close()
+
+
+		# tricky part:
+		#     translate module to AST
+		#     use *another* type annotator to translate the module
+		#         recurse, if necessary
+		#     export symbols
+		#     insert symbols in our module
+
+		# FIXME possible infinite recursion: circular dependencies are not detected
+		# FIXME very inefficient:
+		#     ideally first a dependency graph is generated
+		#     this can be used by any make like tool to instruct the compiler to generate (precompiled???) headers
+		#     the headers can be parsed much faster
+		#     additionally we should maintain an internal list of already parsed modules
+		from source2ast import sourcecode2AST
+
+		numErrors, ast = sourcecode2AST(toImportData)
+		if numErrors:
+			self._raiseException(CompileError, tree=moduleName, inlineText='module contains errors')
+
+		mt = ASTTypeAnnotator()
+		mt.walkAST(ast, toImport, toImportData)
+
+
+		# many strange things can happen here
+		# assume a user has two modules with the same package names, same module names
+		# and then defines in both modules a function
+		#     def f() as int32;
+		# but with different bodies. Now both function get the same mangled name and we have no idea which one to use...
+		# At least this case will generate a linker error
+
+		# get global symbols
+		st = mt._moduleNode.symbolTable
+		symbols = st.getAllSymbols()
+
+		for k, v in symbols.items():
+			# FIXME for now only copy ESFunction's and especially not ESType's to avoid name clashes
+			if isinstance(v, list):
+				for x in v:
+					assert(isinstance(x, ESFunction))
+					self._addSymbol(name=k, symbol=x)
+					print x
+
+
 
 
 	def _onFuncPrototype(self, ast, modifierKeys, modifierValues, name, returnTypeName, parameterNames, parameterTypeNames, block):
@@ -237,7 +311,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 				self._raiseException(RecoverableCompileError, tree=modifierKeys[i], inlineText='unknown function modifier')
 		
 
-		esFunction = ESFunction(name.text, functionType, paramNames, mangling=mangling, linkage=linkage)
+		esFunction = ESFunction(name.text, self._moduleNode.packageName, self._moduleNode.moduleName, functionType, paramNames, mangling=mangling, linkage=linkage)
 		ast.esFunction = esFunction
 
 		# TODO check for duplicate entries

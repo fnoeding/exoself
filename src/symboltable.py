@@ -59,6 +59,9 @@ class SymbolTable(object):
 
 			self._symbols[name] = symbol
 
+	def getAllSymbols(self):
+		return self._symbols.copy() # shallow copy should be enough
+
 
 	def findBaseName(self, name):
 		assert(isinstance(name, unicode))

@@ -33,7 +33,7 @@ from estype import ESType
 
 
 class ESFunction(object):
-	def __init__(self, name, esType, paramNames, mangling=None, linkage=None):
+	def __init__(self, name, package, module, esType, paramNames, mangling=None, linkage=None):
 		assert(isinstance(name, unicode))
 		assert(isinstance(esType, ESType))
 		for x in paramNames:
@@ -41,6 +41,8 @@ class ESFunction(object):
 
 		self.esType = esType
 		self.name = name
+		self.package = package
+		self.module = module
 		self.parameterNames = paramNames
 
 		if not mangling:
@@ -55,7 +57,7 @@ class ESFunction(object):
 
 
 	def __str__(self):
-		return '%s: %s; linkage=%s mangling=%s' % (self.name, self.esType, self.linkage, self.mangling)
+		return '%s (%s, %s): %s; linkage=%s mangling=%s' % (self.name, self.package, self.module, self.esType, self.linkage, self.mangling)
 
 
 
