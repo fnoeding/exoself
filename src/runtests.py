@@ -40,7 +40,7 @@ args = None
 
 
 def runExoself(filebase, opts, quiet=False, expectCompileError=False):
-	postFix = ''
+	postFix = '' # really neded with subrocess?
 	if quiet:
 		postFix = ' 1> /dev/null 2> /dev/null'
 

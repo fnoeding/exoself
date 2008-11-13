@@ -39,7 +39,6 @@ import os.path
 import re
 
 from mangle import *
-from typesystem import *
 from esfunction import ESFunction
 from esvalue import ESValue
 from esvariable import ESVariable
