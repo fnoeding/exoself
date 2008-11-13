@@ -32,6 +32,8 @@ from errors import CompileError, RecoverableCompileError
 import os
 from tree import TreeType
 
+from esfunction import ESFunction
+
 
 
 class ASTWalker(object):
@@ -255,6 +257,88 @@ class ASTWalker(object):
 
 		raise exType(s)
 		
+
+	def _findSymbolHelper(self, name):
+		# start at current symbol table, then walk all AST nodes containing symbol tables until root node. Stop search when something was found
+		results = []
+		for ast in reversed(self._nodes):
+			st = getattr(ast, 'symbolTable', None)
+			if not st:
+				continue
+
+			s = st.findSymbol(name)
+			if not s:
+				continue
+
+			if isinstance(s, list):
+				results.extend(s)
+			else:
+				return s
+
+		if results:
+			return results
+		else:
+			return None
+
+
+	def _findSymbol(self, **kwargs): # fromTree=None, name=None, type_=None
+		if 'name' in kwargs:
+			name = kwargs['name']
+			fromTree = None
+		else:
+			fromTree = kwargs['fromTree']
+			name = fromTree.text
+
+		type_ = kwargs['type_']
+
+
+		s = self._findSymbolHelper(name)
+
+		if not s:
+			self._raiseException(RecoverableCompileError, tree=fromTree, inlineText='could not find symbol')
+		if type_:
+			bad = False
+			if type_ == ESFunction:
+				if not isinstance(s, list):
+					bad = True
+			elif not isinstance(s, type_):
+				bad = True
+
+			if bad:
+				self._raiseException(RecoverableCompileError, tree=fromTree, inlineText='symbol did not match expected type: %s' % type_) # instead of str(type_) use a better description
+
+		return s
+
+
+	def _addSymbol(self, **kwargs): # fromTree=None, name=None, symbol=None
+		if 'name' in kwargs:
+			name = kwargs['name']
+			fromTree = None
+		else:
+			fromTree = kwargs['fromTree']
+			name = fromTree.text
+
+		symbol = kwargs['symbol']
+
+		# add a symbol to the innermost symbol table and makes sure that this symbol is unique
+		if not name:
+			name = fromTree.text
+
+		prevDef = self._findSymbolHelper(name)
+
+		if prevDef:
+			# can only overload / overwrite functions
+			if not isinstance(prevDef, list) or not isinstance(symbol, ESFunction):
+				self._raiseException(RecoverableCompileError, tree=fromTree, inlineText='symbol already defined')
+
+
+		for ast in reversed(self._nodes):
+			st = getattr(ast, 'symbolTable', None)
+			if not st:
+				continue
+
+			st.addSymbol(name, symbol)
+			return
 
 
 
