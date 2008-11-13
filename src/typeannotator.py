@@ -38,6 +38,7 @@ from esvariable import ESVariable
 import estypesystem
 from symboltable import SymbolTable
 from tree import Tree, TreeType
+import re
 
 
 class ASTTypeAnnotator(astwalker.ASTWalker):
@@ -170,7 +171,15 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			# TODO error / warn if filename is not a suitable module name
 			ast.moduleName = os.path.split(self._filename)[1]
 
-		
+		# make sure module name is valid
+		m = re.match('[a-zA-Z_][a-zA-Z_0-9]*', ast.moduleName)
+		bad = True
+		if m and m.span() == (0, len(ast.moduleName)):
+			bad = False
+		if bad:
+			self._raiseException(CompileError, postText='Module filenames should begin with alpha character or underscore otherwise it\'s not possible to import them. To disable this error message set a valid module name using the \'module\' statement.')
+
+
 		############################################
 		# init some important data structures
 		############################################
