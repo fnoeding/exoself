@@ -151,21 +151,20 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		return t
 
 
-	def _onModuleStart(self, ast):
+	def _onModuleStart(self, ast, packageName, moduleName, statements):
 		self._moduleNode = ast
 		self._symbolTables = []
 		ast.symbolTable = None
-		ast.packageName = ''
-		ast.moduleName = None
 
-		# get package and module statements
-		idx = 0
-		if len(ast.children) > 0 and ast.children[0].type in [TreeType.PACKAGE, TreeType.MODULE]:
-			self._dispatch(ast.children[0])
-			idx += 1
-		if len(ast.children) > 1 and ast.children[1].type in [TreeType.PACKAGE, TreeType.MODULE]:
-			self._dispatch(ast.children[1])
-			idx += 1
+		if packageName:
+			ast.packageName = packageName.text
+		else:
+			ast.packageName = ''
+
+		if moduleName:
+			ast.moduleName = moduleName.text
+		else:
+			ast.moduleName = None
 
 		if not ast.moduleName:
 			# use filename
@@ -183,7 +182,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		############################################
 		# import stuff
 		############################################
-		#for x in ast.children[idx:]:
+		#for x in statements:
 		#	if x.type in [TreeType.IMPORTALL]:
 		#		self._dispatch(x)
 
@@ -192,7 +191,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		############################################
 		old = self._onDefFunction
 		self._onDefFunction = self._onFuncPrototype
-		for x in ast.children:
+		for x in statements:
 			if x.type == TreeType.DEFFUNC:
 				self._dispatch(x) # do not directly call _onFuncPrototype; _dispatch manages _nodes field
 		self._onDefFunction = old
@@ -200,76 +199,55 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		############################################
 		# annotate the whole tree
 		############################################
-		for x in ast.children:
-			if x.type in [TreeType.PACKAGE, TreeType.MODULE, TreeType.IMPORTALL]:
+		for x in statements:
+			if x.type in [TreeType.IMPORTALL]:
 				# already done
 				continue
 
 			self._dispatch(x)
 
 
-
-	def _onPackage(self, ast):
-		self._moduleNode.packageName = ast.children[0].text
-
-
-	def _onModule(self, ast):
-		self._moduleNode.moduleName = ast.children[0].text
-
-
-	def _onFuncPrototype(self, ast):
-		modifiers = ast.children[0]
-		functionNameNode = ast.children[1]
-		functionName = functionNameNode.text
-		returnTypeNode = ast.children[2]
-		parameters = ast.children[3]
-		# optional 5th part 'block' is not needed here
-
+	def _onFuncPrototype(self, ast, modifierKeys, modifierValues, name, returnTypeName, parameterNames, parameterTypeNames, block):
 		# create type of function
-		returnTypes = [self._findSymbol(fromTree=returnTypeNode, type_=ESType)]
+		returnTypes = [self._findSymbol(fromTree=returnTypeName, type_=ESType)]
 
-		parameterNames = []
-		parameterTypes = []
-		for i in range(len(parameters.children) // 2):
-			name = parameters.children[i * 2].text
-			typeNameNode = parameters.children[i * 2 + 1]
+		paramNames = []
+		paramTypes = []
+		for i in range(len(parameterTypeNames)):
+			paramNames.append(parameterNames[i].text)
+			type_ = self._findSymbol(fromTree=parameterTypeNames[i], type_=ESType)
 
-			parameterNames.append(name)
-			type_ = self._findSymbol(fromTree=typeNameNode, type_=ESType)
+			paramTypes.append(type_)
 
-			parameterTypes.append(type_)
-
-		functionType = ESType.createFunction(returnTypes, parameterTypes)
+		functionType = ESType.createFunction(returnTypes, paramTypes)
 
 
 		# parse modifiers
 		linkage = None
 		mangling = None
-		for i in range(len(modifiers.children) // 2):
-			name = modifiers.children[i * 2].text
-			value = modifiers.children[i * 2 + 1].text
+		for i in range(len(modifierKeys)):
+			k = modifierKeys[i].text
+			v = modifierValues[i].text
 
-			if name == u'linkage':
-				linkage = value
-			elif name == u'mangling':
-				mangling = value
+			if k == u'linkage':
+				linkage = v
+			elif k == u'mangling':
+				mangling = v
 			else:
-				self._raiseException(RecoverableCompileError, tree=modifiers.children[i * 2 +1], inlineText='unknown function modifier')
+				self._raiseException(RecoverableCompileError, tree=modifierKeys[i], inlineText='unknown function modifier')
 		
 
-		esFunction = ESFunction(functionName, functionType, parameterNames, mangling=mangling, linkage=linkage)
+		esFunction = ESFunction(name.text, functionType, paramNames, mangling=mangling, linkage=linkage)
 		ast.esFunction = esFunction
 
 		# TODO check for duplicate entries
-		self._addSymbol(fromTree=functionNameNode, symbol=esFunction)
+		self._addSymbol(fromTree=name, symbol=esFunction)
 
 
-	def _onDefFunction(self, ast):
-		if len(ast.children) == 4:
-			# it's only a prototype
+	def _onDefFunction(self, ast, modifierKeys, modifierValues, name, returnTypeName, parameterNames, parameterTypeNames, block):
+		if not block:
+			# it's only a prototype --> already all work done by _onFuncPrototype in preprocessing phase
 			return
-
-		assert(len(ast.children) == 5)
 
 		# add a new symbol table and add entries for parameter names
 		ast.symbolTable = SymbolTable() # do not use directly! use self._addSymbol etc.
@@ -277,18 +255,18 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		esFunction = ast.esFunction
 		esParamTypes = esFunction.esType.getFunctionParameterTypes()
 		for i in range(len(esFunction.parameterNames)):
-			varName=esFunction.parameterNames[i]
+			varName=parameterNames[i].text
 			esVar = ESVariable(varName, esParamTypes[i])
-			self._addSymbol(name=varName, symbol=esVar)
+			self._addSymbol(fromTree=parameterNames[i], symbol=esVar)
 
 		blockNode = ast.children[4]
 		self._dispatch(blockNode)
 
 
-	def _onBlock(self, ast):
+	def _onBlock(self, ast, blockContent):
 		ast.symbolTable = SymbolTable() # do not use directly! use self._addSymbol etc.	
 
-		for x in ast.children:
+		for x in blockContent:
 			self._dispatch(x)
 
 	
@@ -296,7 +274,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		pass
 
 
-	def _onReturn(self, ast):
+	def _onReturn(self, ast, expressions):
 		# find enclosing function definion
 		esFunction = None
 		for n in reversed(self._nodes[:-1]):
@@ -313,11 +291,11 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 		if not returnTypes:
 			# function returns 'void'
-			if len(ast.children) > 0:
+			if len(expressions) > 0:
 				self._raiseException(RecoverableCompileError, tree=ast, inlineText='function is declared as void: can\'t return anything')
 
 		else:
-			for i, x in enumerate(ast.children):
+			for i, x in enumerate(expressions):
 				self._dispatch(x)
 				t = x.esType # every expression must have an esType member
 
@@ -325,13 +303,13 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 				if not t.isEquivalentTo(returnTypes[i], False):
 					# types did not match, try implicit cast
 					if not estypesystem.canImplicitlyCast(t, returnTypes[i]):
-						self._raiseException(RecoverableCompileError, tree=ast.children[i], inlineText='incompatible return type')
+						self._raiseException(RecoverableCompileError, tree=expressions[i], inlineText='incompatible return type')
 
 					# TODO insert CAST node
 
 
 
-	def _onIntegerConstant(self, ast):
+	def _onIntegerConstant(self, ast, constant):
 		# FIXME really determine type of constant
 		ast.esType = self._findSymbol(name=u'int32', type_=ESType)
 
@@ -378,64 +356,69 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			assert(0 and 'dead code path')
 
 
-	def _onCallFunc(self, ast):
-		calleeNameNode = ast.children[0]
-		argNodes = ast.children[1:]
+	def _onCallFunc(self, ast, calleeName, expressions):
+		for x in expressions:
+			self._dispatch(x)
 
-		esFunctions = self._findSymbol(fromTree=calleeNameNode, type_=ESFunction)
+		esFunctions = self._findSymbol(fromTree=calleeName, type_=ESFunction)
 
 		# TODO find best matching function for parameters
-		# FIXME taking the first one for testing...
-		assert(len(esFunctions) == 1)
+		# for now simply match argument count
+		callee = None
+		for f in esFunctions:
+			if len(f.esType.getFunctionParameterTypes()) == len(expressions):
+				callee = f
+				break
 
-		returnTypes = esFunctions[0].esType.getFunctionReturnTypes()
+		if not callee:
+			self._raiseException(RecoverableCompileError, tree=calleeName, inlineText='no matching function found')
+
+
+		returnTypes = callee.esType.getFunctionReturnTypes()
 		assert(len(returnTypes) == 1)
 
 		ast.esType = returnTypes[0]
 
 
-	def _onVariable(self, ast):
-		varNameNode = ast.children[0]	
-
-
-		s = self._findSymbol(fromTree=varNameNode, type_=ESVariable)
+	def _onVariable(self, ast, variableName):
+		s = self._findSymbol(fromTree=variableName, type_=ESVariable)
 
 		ast.esType = s.esType
 
-	def _onAssert(self, ast):
-		self._dispatch(ast.children[0])
+	def _onAssert(self, ast, expression):
+		self._dispatch(expression)
 
-		esType = ast.children[0].esType
+		esType = expression.esType
 		if not esType.isEquivalentTo(self._findSymbol(name=u'bool', type_=ESType), False):
 			if not estypesystem.canImplicitlyCast(esType, self._findSymbol(name=u'bool', type_=ESType)):
-				self._raiseException(RecoverableCompileError, tree=ast.children[0], inlineText='expression is of incompatible type. expected bool')
+				self._raiseException(RecoverableCompileError, tree=expression, inlineText='expression is of incompatible type. expected bool')
 
 			# TODO insert CAST node
 
-	def _onIf(self, ast):
-		# dispatch all nodes
-		for x in ast.children:
+	def _onIf(self, ast, expressions, blocks, elseBlock):
+		for x in expressions:
 			self._dispatch(x)
 
-		n = len(ast.children)
-		for i in range(n // 2):
-			exprNode = ast.children[2 * i]
-			esType = exprNode.esType
+		for i in range(len(expressions)):
+			esType = expressions[i].esType
 
 			if not esType.isEquivalentTo(self._findSymbol(name=u'bool', type_=ESType), False):
 				if not estypesystem.canImplicitlyCast(esType, self._findSymbol(name=u'bool', type_=ESType)):
-					self._raiseException(RecoverableCompileError, tree=ast.children[0], inlineText='expression is of incompatible type. expected bool')
+					self._raiseException(RecoverableCompileError, tree=expressions[i], inlineText='expression is of incompatible type. expected bool')
 
 				# TODO insert CAST node
 
+		for x in blocks:
+			self._dispatch(x)
 
-	def _onDefVariable(self, ast):
-		varNameNode = ast.children[0]
-		varTypeNameNode = ast.children[1]
+		if elseBlock:
+			self._dispatch(elseBlock)
 
-		esType = self._findSymbol(fromTree=varTypeNameNode, type_=ESType)
-		esVar = ESVariable(varNameNode.text, esType)
-		self._addSymbol(fromTree=varNameNode, symbol=esVar)
+
+	def _onDefVariable(self, ast, variableName, typeName):
+		esType = self._findSymbol(fromTree=typeName, type_=ESType)
+		esVar = ESVariable(variableName.text, esType)
+		self._addSymbol(fromTree=variableName, symbol=esVar)
 
 
 	def _onAssignHelper(self, varNameNode, exprNode):
@@ -460,90 +443,57 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 
 	
-	def _onAssign(self, ast):
-		varNameNode = ast.children[0]
-		exprNode = ast.children[1]
+	def _onAssign(self, ast, variableName, expression):
+		self._onAssignHelper(variableName, expression)
 
 
-		self._onAssignHelper(varNameNode, exprNode)
-
-
-	def _onListAssign(self, ast):
+	def _onListAssign(self, ast, variableNames, expressions):
 		# semantics of list assign in cases where a variable is referenced on both sides:
 		# 1st copy results of ALL expressions into temporary variables
 		# 2nd copy content of temporary variables to destination variables
 		# --> just assign esType of n-th expression to n-th assignee
 
-		destinationNameNodes = ast.children[0].children
-		exprNodes = ast.children[1].children
-
-		assert(len(destinationNameNodes) == len(exprNodes))
-
-		for i in range(len(exprNodes)):
-			self._onAssignHelper(destinationNameNodes[i], exprNodes[i])
+		for i in range(len(expressions)):
+			self._onAssignHelper(variableNames[i], expressions[i])
 
 
-	def _onFor(self, ast):
+	def _onFor(self, ast, variableName, rangeStart, rangeStop, rangeStep, block):
 		ast.symbolTable = SymbolTable() # do not use directly!
 
-		varNameNode = ast.children[0]
-		assert(ast.children[1].type == TreeType.RANGE)
-
-		rangeNode = ast.children[1]
-		blockNode = ast.children[2]
-
-		n = len(rangeNode.children)
-		if n == 3:
-			startExprNode = rangeNode.children[0]
-			stopExprNode = rangeNode.children[1]
-			stepExprNode = rangeNode.children[2]
-
-			self._dispatch(startExprNode)
-			self._dispatch(stopExprNode)
-			self._dispatch(stepExprNode)
-		elif n == 2:
-			startExprNode = rangeNode.children[0]
-			stopExprNode = rangeNode.children[1]
-			stepExprNode = None
-			
-			self._dispatch(startExprNode)
-			self._dispatch(stopExprNode)
-		elif n == 1:
-			startExprNode = None
-			stopExprNode = rangeNode.children[0]
-			stepExprNode = None
-
-			self._dispatch(stopExprNode)
-		else:
-			assert(0 and 'dead code path')
+		if rangeStart:
+			self._dispatch(rangeStart)
+		if rangeStop:
+			self._dispatch(rangeStop)
+		if rangeStep:
+			self._dispatch(rangeStep)
 
 
 		# FIXME for now only int32 support
 		int32 = self._findSymbol(name=u'int32', type_=ESType)
-		bad = False
-		if startExprNode and not startExprNode.esType.isEquivalentTo(int32, False):
-			bad = True
-		if stopExprNode and not stopExprNode.esType.isEquivalentTo(int32, False):
-			bad = True
-		if stepExprNode and not stepExprNode.esType.isEquivalentTo(int32, False):
-			bad = True
+		badNode = None
+		if rangeStart and not rangeStart.esType.isEquivalentTo(int32, False):
+			bad = rangeStart
+		if rangeStop and not rangeStop.esType.isEquivalentTo(int32, False):
+			bad = rangeStop
+		if rangeStep and not rangeStep.esType.isEquivalentTo(int32, False):
+			bad = rangeStep
 
-		if bad:
-			self._raiseException(RecoverableCompileError, tree=rangeNode, inlineText='range expressions are currently only implemented for int32')
+		if badNode:
+			self._raiseException(RecoverableCompileError, tree=badNode, inlineText='range expressions are currently only implemented for int32')
 
 		try:
-			var = self._findSymbol(fromTree=varNameNode, type_=ESVariable)
+			var = self._findSymbol(fromTree=variableName, type_=ESVariable)
 		except CompileError:
 			var = None
 
 		if var:
 			if not var.esType.isEquivalentTo(int32, False):
-				self._raiseException(RecoverableCompileError, tree=varNameNode, inlineText='loop variable must be of type int32 until support for other types is implemented')
+				self._raiseException(RecoverableCompileError, tree=variableName, inlineText='loop variable must be of type int32 until support for other types is implemented')
 		else:
-			var = ESVariable(varNameNode.text, int32)
-			self._addSymbol(fromTree=varNameNode, symbol=var)
+			var = ESVariable(variableName.text, int32)
+			self._addSymbol(fromTree=variableName, symbol=var)
 			
-		self._dispatch(blockNode)
+		self._dispatch(block)
 
 
 	def _onBreak(self, ast):
@@ -568,21 +518,20 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			self._raiseException(RecoverableCompileError, tree=ast, inlineText='may only be used inside for, while and similar constructs')
 
 
-	def _onWhile(self, ast):
-		exprNode = ast.children[0]
-		self._dispatch(exprNode)
+	def _onWhile(self, ast, expression, block):
+		self._dispatch(expression)
 
-		esType = exprNode.esType
+		esType = expression.esType
 		bool = self._findSymbol(name=u'bool', type_=ESType)
 		if not esType.isEquivalentTo(bool, False):
 			# types did not match, try implicit cast
 			if not estypesystem.canImplicitlyCast(esType, bool):
-				self._raiseException(RecoverableCompileError, tree=ast.children[i], inlineText='incompatible type, expected bool')
+				self._raiseException(RecoverableCompileError, tree=expression, inlineText='incompatible type, expected bool')
 
 			# TODO add cast node
 
 
-		self._dispatch(ast.children[1])
+		self._dispatch(block)
 
 
 

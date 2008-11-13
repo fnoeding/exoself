@@ -63,49 +63,148 @@ class ASTWalker(object):
 
 		if t == tt.MODULESTART:
 			callee = self._onModuleStart
-		elif t == tt.PACKAGE:
-			callee = self._onPackage
-		elif t == tt.MODULE:
-			callee = self._onModule
+
+			packageName = None
+			moduleName = None
+			
+			n = len(ast.children)
+			idx = 0
+			for i in range(n):
+				if ast.children[i].type == tt.PACKAGE:
+					packageName = ast.children[i]
+					idx += 1
+				elif ast.children[i].type == tt.MODULE:
+					moduleName = ast.children[i]
+					idx += 1
+			kwargs['statements'] = ast.children[idx:]
+			kwargs['packageName'] = packageName
+			kwargs['moduleName'] = moduleName
 		elif t == tt.IMPORTALL:
+			# TODO
 			callee = self._onImportAll
 		elif t == tt.DEFFUNC:
 			callee = self._onDefFunction
+
+			n = len(ast.children)
+			modifierKeys = []
+			modifierValues = []
+			for i in range(len(ast.children[0].children) // 2):
+				modifierKeys.append(ast.children[0].children[2 * i])
+				modifierValues.append(ast.children[0].children[2 * i + 1])
+			kwargs['modifierKeys'] = modifierKeys
+			kwargs['modifierValues'] = modifierValues
+
+			kwargs['name'] = ast.children[1]
+			kwargs['returnTypeName'] = ast.children[2]
+
+			parameterNames = []
+			parameterTypeNames = []
+			for i in range(len(ast.children[3].children) // 2):
+				parameterNames.append(ast.children[3].children[2 * i])
+				parameterTypeNames.append(ast.children[3].children[2 * i + 1])
+			kwargs['parameterNames'] = parameterNames
+			kwargs['parameterTypeNames'] = parameterTypeNames
+
+			if n == 4:
+				block = None
+			elif n == 5:
+				block = ast.children[4]
+			elif n > 5:
+				assert(0 and 'dead code path')
+			kwargs['block'] = block
+
 		elif t == tt.BLOCK:
 			callee = self._onBlock
+			kwargs['blockContent'] = ast.children
 		elif t == tt.PASS:
 			callee = self._onPass
 		elif t == tt.RETURN:
 			callee = self._onReturn
+			kwargs['expressions'] = ast.children
 		elif t == tt.ASSERT:
 			callee = self._onAssert
+			kwargs['expression'] = ast.children[0]
 		elif t == tt.IF:
 			callee = self._onIf
+
+			expressions = []
+			blocks = []
+			elseBlock = None
+			for i in range(len(ast.children) // 2):
+				expressions.append(ast.children[2 * i])
+				blocks.append(ast.children[2 * i + 1])
+			if len(ast.children) & 1:
+				elseBlock = ast.children[-1]
+
+			kwargs['expressions'] = expressions
+			kwargs['blocks'] = blocks
+			kwargs['elseBlock'] = elseBlock
 		elif t == tt.FOR:
 			callee = self._onFor
+			kwargs['variableName'] = ast.children[0]
+
+			rangeNode = ast.children[1]
+			assert(rangeNode.type == tt.RANGE)
+			rangeStart = None
+			rangeStop = None
+			rangeStep = None
+
+			n = len(rangeNode.children)
+			if n == 1:
+				rangeStop = rangeNode.children[0]
+			elif n == 2:
+				rangeStart = rangeNode.children[0]
+				rangeStop = rangeNode.children[1]
+			elif n == 3:
+				rangeStart = rangeNode.children[0]
+				rangeStop = rangeNode.children[1]
+				rangeStep = rangeNode.children[2]
+			else:
+				assert(0 and 'dead code path')
+
+			kwargs['rangeStart'] = rangeStart
+			kwargs['rangeStop'] = rangeStop
+			kwargs['rangeStep'] = rangeStep
+
+			kwargs['block'] = ast.children[2]
 		elif t == tt.WHILE:
 			callee = self._onWhile
+			kwargs['expression'] = ast.children[0]
+			kwargs['block'] = ast.children[1]
 		elif t == tt.BREAK:
 			callee = self._onBreak
 		elif t == tt.CONTINUE:
 			callee = self._onContinue
 		elif t == tt.INTEGER_CONSTANT:
 			callee = self._onIntegerConstant
+			kwargs['constant'] = ast.children[0]
 		elif t == tt.FLOAT_CONSTANT:
 			callee = self._onFloatConstant
+			kwargs['constant'] = ast.children[0]
 		elif t == tt.CALLFUNC:
 			callee = self._onCallFunc
+			kwargs['calleeName'] = ast.children[0]
+			kwargs['expressions'] = ast.children[1:]
 		elif t == tt.VARIABLE:
 			callee = self._onVariable
+			kwargs['variableName'] = ast.children[0]
 		elif t == tt.DEFVAR:
 			callee = self._onDefVariable
+			kwargs['variableName'] = ast.children[0]
+			kwargs['typeName'] = ast.children[1]
 		elif t == tt.ASSIGN:
 			callee = self._onAssign
+			kwargs['variableName'] = ast.children[0]
+			kwargs['expression'] = ast.children[1]
 		elif t == tt.LISTASSIGN:
 			callee = self._onListAssign
+			assert(len(ast.children[0].children) == len(ast.children[1].children))
+			kwargs['variableNames'] = ast.children[0].children
+			kwargs['expressions'] = ast.children[1].children
 		elif t in [tt.PLUS, tt.MINUS, tt.STAR, tt.DOUBLESTAR, tt.SLASH, tt.PERCENT,
 				tt.NOT, tt.AND, tt.OR, tt.XOR,
 				tt.LESS, tt.LESSEQUAL, tt.EQUAL, tt.NOTEQUAL, tt.GREATEREQUAL, tt.GREATER]:
+			# TODO
 			callee = self._onBasicOperator
 		else:
 			assert(0 and 'dead code path / support for new token type not implemented')
