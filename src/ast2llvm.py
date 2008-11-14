@@ -334,28 +334,21 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 
 	def _onIf(self, ast, expressions, blocks, elseBlock):
-		# children: expr block (expr block)* block?
-		#           if         else if       else
-		
-		mergeBB = self._currentFunction.llvmFunc.append_basic_block('if_merge')
-		# iterate over all 'if' and 'else if' blocks
-		for i in range(tree.getChildCount() // 2):
-			condESValue = self._dispatch(tree.getChild(2 * i))
-			if condESValue.llvmType != Type.int(1):# FIXME use comparison against bool?
-				cond = self._currentBuilder.icmp(IPRED_NE, condESValue.llvmValue, Constant.int(condESValue.llvmType, 0)) # FIXME use conversion to bool
-			else:
-				cond = condESValue.llvmValue
+		llvmFunc = self._findCurrentFunction().llvmRef
 
-			
-	
-			thenBB = self._currentFunction.llvmFunc.append_basic_block('if_then')
-			elseBB = self._currentFunction.llvmFunc.append_basic_block('if_else')
 
-			self._currentBuilder.cbranch(cond, thenBB, elseBB)
+
+		mergeBB = llvmFunc.append_basic_block('if_merge')
+		for i in range(len(expressions)):
+			thenBB = llvmFunc.append_basic_block('if_then')
+			elseBB = llvmFunc.append_basic_block('if_else')
+
+			self._dispatch(expressions[i])
+			self._currentBuilder.cbranch(expressions[i].llvmValue, thenBB, elseBB)
 
 			# generate code for then branch
 			self._currentBuilder = Builder.new(thenBB)
-			self._dispatch(tree.getChild(2 * i + 1))
+			self._dispatch(blocks[i])
 
 			# branch to mergeBB, but only if there was no terminator instruction
 			currentBB = self._currentBuilder.block
@@ -364,11 +357,10 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 			# continue with next else if / else
 			self._currentBuilder = Builder.new(elseBB)
-		if tree.getChildCount() % 2 == 1:
-			# generate code for else branch
-			self._dispatch(tree.getChild(tree.getChildCount() - 1))
+		if elseBlock:
+			self._dispatch(elseBlock)
 
-		# close last elseBB, but only if there was no terminator instruction
+		# close last elseBB
 		currentBB = self._currentBuilder.block
 		if not (currentBB.instructions and currentBB.instructions[-1].is_terminator):
 			self._currentBuilder.branch(mergeBB)
@@ -798,9 +790,6 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 
 
-#	def _dispatch(self, tree):
-#		return self._dispatchTable[tree.text](tree)
-
 
 
 	def walkAST(self, ast, absFilename, sourcecode=''):
@@ -814,52 +803,6 @@ class ModuleTranslator(astwalker.ASTWalker):
 		return self._module
 
 
-
-	def _convertType(self, esValue, toType, warn=True):
-		# TODO refactor code into external functions
-		assert(isinstance(esValue, ESValue))
-		if isinstance(toType, ESType):# FIXME toType should always be ESType
-			toType = toType.typename
-		assert(isinstance(toType, unicode))# FIXME toType should never be a string
-
-		t1 = esValue.typename
-		t2 = toType
-
-		if t1.startswith(u'int') and t2.startswith(u'int'):
-			# both are signed integers
-			t1Bits = int(t1[3:])
-			t2Bits = int(t2[3:])
-
-			if t1Bits < t2Bits:
-				r = self._currentBuilder.sext(esValue.llvmValue, ESTypeToLLVM(t2))
-				return ESValue(r, t2)
-			else:
-				# this COULD lose precision
-				# FIXME TODO emit a warning
-				r = self._currentBuilder.trunc(esValue.llvmValue, ESTypeToLLVM(t2))
-				return ESValue(r, t2)
-		else:
-			self._raiseException(RecoverableCompileError, postText='conversion between %s and %s is not yet supported' % (t1, t2))
-
-	def _promoteTypes(self, v1, v2):
-		t1 = v1.typename
-		t2 = v2.typename
-
-		assert(t2 != t1)
-
-		if t1.startswith(u'int') and t2.startswith(u'int'):
-			# both are signed integers
-			t1Bits = int(t1[3:])
-			t2Bits = int(t2[3:])
-
-			if t1Bits < t2Bits:
-				c = self._convertType(v1, t2)
-				return (c, v2)
-			else:
-				c = self._convertType(v2, t1)
-				return (v1, c)
-		else:
-			self._raiseException(RecoverableCompileError, postText='conversion between %s and %s is not yet supported' % (t1, t2))
 
 
 	
