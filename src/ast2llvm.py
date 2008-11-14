@@ -672,12 +672,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 		elif op == tt.XOR:
 			ast.llvmValue = self._currentBuilder.xor(arg1.llvmValue, arg2.llvmValue)
 		elif op in [tt.LESS, tt.LESSEQUAL, tt.EQUAL, tt.NOTEQUAL, tt.GREATEREQUAL, tt.GREATER]:
-			# move this code to type annotator!
-			if not arg1.esType.isEquivalentTo(arg2.esType, False):
-				raise NotImplementedError('TODO')
-
-			if not arg1.esType.isEquivalentTo(int32, False): # FIXME replace with check for signed integer
-				raise NotImplementedError('TODO')
+			assert(arg1.llvmValue.type.kind == TYPE_INTEGER) # FIXME
 
 			# signed integer code
 			preds = {}
@@ -689,6 +684,14 @@ class ModuleTranslator(astwalker.ASTWalker):
 			preds[tt.GREATER] = IPRED_SGT
 
 			ast.llvmValue = self._currentBuilder.icmp(preds[op], arg1.llvmValue, arg2.llvmValue)
+		elif op == tt.DOUBLESTAR:
+			if arg2.llvmValue.type.kind == TYPE_INTEGER:
+				# powi
+				powiFunc = Function.intrinsic(self._module, INTR_POWI, [arg1.llvmValue.type])
+				ast.llvmValue = self._currentBuilder.call(powiFunc, [arg1.llvmValue, arg2.llvmValue])
+			else:
+				# pow
+				raise NotImplementedError('TODO')
 		else:
 			raise NotImplementedError('operator not implemented: %s / "%s"' % (op, ast.text))
 
@@ -771,23 +774,40 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 		bool = self._findSymbol(name=u'bool', type_=ESType)
 		int32 = self._findSymbol(name=u'int32', type_=ESType)
+		double = self._findSymbol(name=u'double', type_=ESType)
+
+		targetT = ast.esType
+		sourceT = expression.esType
+
+		if targetT.isEquivalentTo(sourceT, True):# may be really the same or only structurally
+			return
 
 
-		esType = ast.esType # target type
-		if esType.isEquivalentTo(bool, False):
-			if expression.esType.isEquivalentTo(int32, False): # FIXME make this a check for integer
+		bad = False
+
+		if targetT.isEquivalentTo(bool, False):
+			if sourceT.isEquivalentTo(int32, False): # FIXME make this a check for integer
 				ast.llvmValue = self._currentBuilder.icmp(IPRED_NE, expression.llvmValue, Constant.int(expression.llvmValue.type, 0))
 			else:
-				raise NotImplementedError('cast from %s to %s is not yet supported' % (expression.esType, esType))
-		elif esType.isEquivalentTo(int32, False):
-			if expression.esType.isEquivalentTo(bool, False):
-				ast.llvmValue = self._currentBuilder.zext(expression.llvmValue, int32.toLLVMType())
+				bad = True
+		elif targetT.isEquivalentTo(int32, False):
+			if sourceT.isEquivalentTo(bool, False):
+				ast.llvmValue = self._currentBuilder.zext(expression.llvmValue, targetT.toLLVMType())
+			elif sourceT.isEquivalentTo(double, False):
+				ast.llvmValue = self._currentBuilder.fptosi(expression.llvmValue, targetT.toLLVMType())
 			else:
-				raise NotImplementedError('cast from %s to %s is not yet supported' % (expression.esType, esType))
+				bad = True
+		elif targetT.isEquivalentTo(double, False): # FIXME make this a check for floating point
+			if sourceT.isEquivalentTo(int32, False): # FIXME make this a check for integer
+				ast.llvmValue = self._currentBuilder.sitofp(expression.llvmValue, targetT.toLLVMType())
+			else:
+				bad
 		else:
-			raise NotImplementedError('cast from %s to %s is not yet supported' % (expression.esType, esType))
+			bad = True
 
 
+		if bad:
+			raise NotImplementedError('cast from %s to %s is not yet supported' % (sourceT, targetT))
 
 
 

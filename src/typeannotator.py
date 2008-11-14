@@ -347,6 +347,8 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		# fetch some types
 		bool = self._findSymbol(name=u'bool', type_=ESType)
 		int32 = self._findSymbol(name=u'int32', type_=ESType)
+		single = self._findSymbol(name=u'single', type_=ESType)
+		double = self._findSymbol(name=u'double', type_=ESType)
 
 
 		if op in [tt.AND, tt.XOR, tt.OR]:
@@ -367,11 +369,14 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 				ast.esType = arg1.esType
 				return
 
-			if arg1.esType.isEquivalentTo(arg2.esType, False):
-				ast.esType = arg1.esType
-				return
+			# FIXME for now only int32 is supported
+			if not arg1.esType.isEquivalentTo(int32, False):
+				self._insertCastNode(arg1, u'int32')
 
-			raise NotImplementedError('TODO')
+			if not arg2.esType.isEquivalentTo(int32, False):
+				self._insertCastNode(arg2, u'int32')
+
+			ast.esType = int32
 		elif op in [tt.STAR, tt.SLASH, tt.PERCENT]:
 			if arg1.esType.isEquivalentTo(arg2.esType, False):
 				ast.esType = arg1.esType
@@ -381,17 +386,33 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 			raise NotImplementedError('TODO')
 		elif op in [tt.DOUBLESTAR]:
-			if not arg1.esType.isEquivalentTo(arg2.esType, False):
+			# base: arg1; exponent: arg2
+			# powi: arg1 any float, arg2 int32
+			# pow: arg1 any float, arg2 same type as arg1
+
+			# FIXME for now only powi
+			if not arg2.esType.isEquivalentTo(int32, False):
+				self._insertCastNode(arg2, u'int32')
+
+			if not (arg1.esType.isEquivalentTo(single, False) or arg1.esType.isEquivalentTo(double, False)):
+				self._insertCastNode(arg1, u'double')
+			else:
 				raise NotImplementedError('TODO')
 
-			# FIXME
-			if not arg1.esType.isEquivalentTo(int32, False):
-				raise NotImplementedError('TODO')
 
-			ast.esType = int32
+			if arg1.esType.isEquivalentTo(single, False):
+				ast.esType = single
+			elif arg1.esType.isEquivalentTo(double, False):
+				ast.esType = double
+			else:
+				raise NotImplementedError('TODO')
 		elif op in [tt.LESS, tt.LESSEQUAL, tt.EQUAL, tt.NOTEQUAL, tt.GREATEREQUAL, tt.GREATER]:
-			if not arg1.esType.isEquivalentTo(arg2.esType, False):
-				raise NotImplementedError('TODO')
+			# FIXME for now only int32 supported
+			if not arg1.esType.isEquivalentTo(int32, False):
+				self._insertCastNode(arg1, u'int32')
+
+			if not arg2.esType.isEquivalentTo(int32, False):
+				self._insertCastNode(arg2, u'int32')
 
 			ast.esType = bool
 		else:
