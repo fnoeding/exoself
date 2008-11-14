@@ -122,6 +122,16 @@ def main():
 	if numErrors:
 		print '%d errors occured\naborting' % numErrors
 		return 1
+
+	# annotate ast
+	ta = ASTTypeAnnotator()
+	try:
+		ta.walkAST(ast, fn, source)
+	except CompileError, e:
+		print e.message.rstrip()
+		print 'aborting'
+		return 1
+
 	if options.saveTemps or options.astOnly:
 		f = file('%s.ast' % baseFN, 'wt')
 		f.write(AST2StringAST(ast))
@@ -136,15 +146,6 @@ def main():
 		f = file('%s.png' % baseFN, 'wt')
 		f.write(AST2PNG(ast))
 		f.close()
-		
-	# annotate ast
-	ta = ASTTypeAnnotator()
-	try:
-		ta.walkAST(ast, fn, source)
-	except CompileError, e:
-		print e.message.rstrip()
-		print 'aborting'
-		return 1
 
 	if options.astOnly:
 		return 0
