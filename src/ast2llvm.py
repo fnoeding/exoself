@@ -133,6 +133,13 @@ class ModuleTranslator(astwalker.ASTWalker):
 				self._raiseException(RecoverableCompileError, postText=s)
 
 
+	def _findCurrentFunction(self):
+		for x in reversed(self._nodes):
+			if x.type == TreeType.DEFFUNC:
+				return x.esFunction
+
+		assert(0 and 'no function found - type checker should have prevented this!')
+
 
 	def _onModuleStart(self, ast, packageName, moduleName, statements):
 		self._errors = 0
@@ -174,37 +181,40 @@ class ModuleTranslator(astwalker.ASTWalker):
 		esFunction = ast.esFunction
 		esType = esFunction.esType
 
+		# FIXME move mangling to ESFunction, see also _onCallFunc
 		if esFunction.name == 'main':# a user defined main gets called by a compiler defined main function
 			mangledName = '__ES_main'
-		elif modMangling == 'C':
+		elif esFunction.mangling == 'C':
 			mangledName = esFunction.name
-		else:
+		elif esFunction.mangling == 'default':
 			mangledName = mangleFunction(esFunction.package, esFunction.module, esFunction.name,
-					['void'], # FIXME
+					'void', # FIXME
 					[]) #FIXME
+		else:
+			assert(0 and 'dead code path')
 
 		try:
 			# make really sure there is no function with this name
-			if self._module.get_function_named(mangledName):
-				nameUsed = True
-		except:
-			nameUsed = False
-		if nameUsed:
-			s1 = 'mangled name already in use: %s' % mangledName
-			s2 ='internal compiler error: name mangling probably not working correctly. Please submit bug report.'
-			self._raiseException(CompileError, tree=tree.getChild(1), inlineText=s1, postText=s2)
+			llvmRef =  self._module.get_function_named(mangledName)
+		except LLVMException:
+			llvmRef = None
 
-
-		llvmRef = self._module.add_function(esType.toLLVMType(), mangledName)
-		esFunction.llvmRef = llvmRef
+		if llvmRef:
+			if not llvmRef.is_declaration:
+				s1 = 'mangled name already in use: %s' % mangledName
+				s2 ='This can be caused by defining a function with the same signature multiple times. If that\'s not the case please submit a bugreport with a testcase.'
+				self._raiseException(CompileError, tree=ast.getChild(1), inlineText=s1, postText=s2)
+		else:
+			llvmRef = self._module.add_function(esType.toLLVMType(), mangledName)
+		esFunction.llvmRef = llvmRef # provide access through symbol table
+		ast.llvmRef = llvmRef # provide direct access through ast node
 
 		# set parameter names
 		for i,x in enumerate(parameterNames):
-			llvmFunc.args[i].name = x.text
+			llvmRef.args[i].name = x.text
 
 
 		if not block:
-			# only a prototype
 			return
 
 	
@@ -213,9 +223,10 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 
 		# add variables
-		# TODO
-		#	for i in range(len(func.llvmFunc.args)):
-		#		self._createAllocaForVar(unicode(func.llvmFunc.args[i].name), func.llvmFunc.args[i].type, func.paramTypes[i].typename, func.llvmFunc.args[i], treeForErrorReporting=tree)
+		for i,x in enumerate(parameterNames):
+			var = self._findSymbol(name=x.text, type_=ESVariable)
+			var.llvmRef = self._createAllocaForVar(x.text, var.toLLVMType(), llvmRef.args[i])
+
 
 		bb = llvmRef.append_basic_block('bb')
 		bEntry.branch(bb)
@@ -264,36 +275,39 @@ class ModuleTranslator(astwalker.ASTWalker):
 			llvmValue = expressions[0].llvmValue
 			self._currentBuilder.ret(llvmValue)
 
-	def _onAssert(self, tree):
-		assert(tree.text == 'assert')
+
+	def _onAssert(self, ast, expression):
+		self._dispatch(expression)
 
 		# TODO add a compiler switch to disable asserts, so they become noop's
 		# TODO add a compiler switch to disable inclusion of context data
 
-		value = self._dispatch(tree.getChild(0))
-		cond = self._currentBuilder.icmp(IPRED_EQ, value.llvmValue, Constant.int(value.llvmType, 0))
 
 		# if value is statically available bail out now / warn
 		# this does not work... investigate later
 		#if value == Constant.int(Type.int(1), 0):
-		#	print 'assert is always False in %s:%d' % ('???', tree.getLine())
+		#	print 'assert is always False in %s:%d' % ('???', ast.line())
+
+		# find current function
+		llvmFunc = self._findCurrentFunction().llvmRef
 
 		# now implement an if
 
-		thenBB = self._currentFunction.llvmFunc.append_basic_block('assert_true') # trap path
-		elseBB = self._currentFunction.llvmFunc.append_basic_block('assert_false') # BasicBlock(None) # TODO check if this is really ok
+		thenBB = llvmFunc.append_basic_block('assert_true') # trap path
+		elseBB = llvmFunc.append_basic_block('assert_false')
 
+		cond = self._currentBuilder.not_(expression.llvmValue)
 		self._currentBuilder.cbranch(cond, thenBB, elseBB)
 
 
 		thenBuilder = Builder.new(thenBB)
 
 		# build error string
-		if tree.line:
-			errorStringConst = 'assert failed! file %s line %d:\n' % (self._filename, tree.line)
+		if ast.line:
+			errorStringConst = 'assert failed! file %s line %d:\n' % (self._filename, ast.line)
 
-			start = max(tree.line - 1 - 5, 0)
-			stop = min(tree.line - 1 + 1, len(self._sourcecodeLines))
+			start = max(ast.line - 1 - 5, 0)
+			stop = min(ast.line - 1 + 1, len(self._sourcecodeLines))
 			for i in range(start, stop):
 				errorStringConst += '% 5d: %s' % (i + 1, self._sourcecodeLines[i])
 				if i != stop - 1:
@@ -318,8 +332,8 @@ class ModuleTranslator(astwalker.ASTWalker):
 	
 		self._currentBuilder = Builder.new(elseBB)
 
-	def _onIf(self, tree):
-		assert(tree.text == 'if')
+
+	def _onIf(self, ast, expressions, blocks, elseBlock):
 		# children: expr block (expr block)* block?
 		#           if         else if       else
 		
@@ -513,39 +527,8 @@ class ModuleTranslator(astwalker.ASTWalker):
 	def _onPass(self, ast):
 		pass
 
-	def _onIntegerConstant(self, ast, constant):
-		value = constant.text.replace('_', '').lower()
-
-		if value.startswith('0x'):
-			i = int(value[2:], 16)
-		elif value.startswith('0b'):
-			i = int(value[2:], 2)
-		elif value.startswith('0') and len(value) > 1:
-			i = int(value[1:], 8)
-		else:
-			i = int(value)
-
-		# TODO think a bit more about default types
-		signed = True # TODO
-		if -(2 ** 7) <= i <= 2 ** 7 - 1:
-			bits = 8
-		elif -(2 ** 15) <= i <= 2 ** 15 - 1:
-			bits = 16
-		elif -(2 ** 31) <= i <= 2 ** 31 - 1:
-			bits = 32
-		elif -(2 ** 63) <= i <= 2 ** 63 - 1:
-			bits = 64
-		else:
-			self._raiseException(RecoverableCompileError, tree=constant, inlineText='constant can not be represented by an int64')
-
-		# FIXME TODO think about a default type. int8 is somewhat inconvenient as a default type...
-		# for now just use int32 that works on every x86 / x86_64 etc.
-		if bits < 32:
-			bits = 32
-		
-		c = Constant.int(Type.int(bits), i)
-
-		ast.llvmValue = c
+	def _onIntegerConstant(self, ast, value):
+		ast.llvmValue = Constant.int(ast.esType.toLLVMType(), value)
 
 
 
@@ -561,21 +544,16 @@ class ModuleTranslator(astwalker.ASTWalker):
 		return Constant.real(constType, f) # FIXME use float
 
 
-	def _onVariable(self, tree):
-		assert(tree.text == 'VARIABLE')
+	def _onVariable(self, ast, variableName):
 
-		varName = tree.getChild(0).text
-		var = self._scopeStack.find(varName)
-		if not var:
-			self._raiseException(RecoverableCompileError, tree=tree.getChild(0), inlineText='undefined variable name')
-
-		return ESValue(self._currentBuilder.load(var.llvmRef), var.typename) # FIXME use real type!
+		var = self._findSymbol(fromTree=variableName, type_=ESVariable)
+		print self._findCurrentFunction().name, variableName.text, var
+		ast.llvmValue = self._currentBuilder.load(var.llvmRef)
 
 
-	def _createAllocaForVar(self, name, llvmType, typename, value=None, treeForErrorReporting=None):
-		assert(not isinstance(llvmType, str) and not isinstance(llvmType, unicode))
-		assert(isinstance(typename, unicode))
 
+
+	def _createAllocaForVar(self, name, llvmType, value=None):
 		# FIXME
 		if llvmType.kind == TYPE_INTEGER:
 			defaultValue = Constant.int(llvmType, 0)
@@ -585,15 +563,12 @@ class ModuleTranslator(astwalker.ASTWalker):
 		if value == None:
 			value = defaultValue
 
-		# check if this variable is already defined
-		if self._scopeStack.find(name):
-			self._raiseException(RecoverableCompileError, tree=treeForErrorReporting, inlineText='variable already defined: %s' % name)
-
 		# use the usual LLVM pattern to create mutable variables: use alloca
 		# important: the mem2reg pass is limited to analyzing the entry block of functions,
 		# so all variables must be defined there
+		llvmFunc = self._findCurrentFunction().llvmRef
 
-		entryBB = self._currentFunction.llvmFunc.get_entry_basic_block()
+		entryBB = llvmFunc.get_entry_basic_block()
 		entryBuilder = Builder.new(entryBB)
 		# workaround: llvm-py segfaults when we call position_at_beginning on an empty block
 		if entryBB.instructions:
@@ -601,11 +576,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 		ref = entryBuilder.alloca(llvmType, name)
 		entryBuilder.store(value, ref)
 
-		var = ESVariable(ref, typename, name)
-
-		self._scopeStack.add(name, var)
-
-		return var
+		return ref
 
 
 	def _onDefVariable(self, tree):
@@ -629,169 +600,107 @@ class ModuleTranslator(astwalker.ASTWalker):
 		self._createAllocaForVar(varName, llvmType, varType, treeForErrorReporting=tree.getChild(0))
 
 
-	def _onCallFunc(self, tree):
-		assert(tree.text == 'CALLFUNC')
-
-		ci = _childrenIterator(tree)
-		callee = ci.next().text
-		nArguments = tree.getChildCount() - 1
-
-		# find function
-		functions = self._scopeStack.find(callee)
-		if not functions:
-			self._raiseException(RecoverableCompileError, tree=tree.getChild(0), inlineText='undefined function')
-
-		# select depending on number of arguments, ignoring anything else for now
-		# FIXME use ESType based checking?
-		function = None
-		for f in functions:
-			if len(f.llvmFunc.args) == nArguments:
-				function = f
-				break
-
-		if not function:
-			s1 = 'no matching function found'
-			s2 = ['canditates:']
-			for f in functions:
-				s2.append('\t%s' % f.llvmFunc.type.pointee)
-			s2 = '\n'.join(s2)
-			self._raiseException(RecoverableCompileError, tree=tree.getChild(0), inlineText=s1, postText=s2)
+	def _onCallFunc(self, ast, calleeName, expressions):
 
 
 		params = []
-		for x in ci:
-			r = self._dispatch(x)
-			params.append(r)
+		for x in expressions:
+			self._dispatch(x)
+			params.append(x.llvmValue)
 
-		# check arguments
-		# TODO check against ES types!
-		if len(params) != len(function.llvmFunc.args):
-			s = 'function type: %s' % function.type.pointee
-			self._raiseException(RecoverableCompileError, tree=tree.getChild(0), inlineText='wrong number of arguments', postText=s)
+		
+		esFunction = ast.esFunction
+		llvmFunc = getattr(esFunction, 'llvmRef', None)
+		if not llvmFunc:
+			# FIXME see _onDefFunction: move mangling to ESFunction
+			if esFunction.name == 'main':# a user defined main gets called by a compiler defined main function
+				mangledName = '__ES_main'
+			elif esFunction.mangling == 'C':
+				mangledName = esFunction.name
+			elif esFunction.mangling == 'default':
+				mangledName = mangleFunction(esFunction.package, esFunction.module, esFunction.name,
+					'void', # FIXME
+					[]) #FIXME
 
-		for i in range(len(function.llvmFunc.args)):
-			if function.llvmFunc.args[i].type != params[i].llvmType: # FIXME use ESType based checking
-				# try implicit conversion
-				try:
-					params[i] = self._convertType(params[i], function.paramTypes[i])
-				except CompileError, NotImplementedError:
-					s = 'argument %d type: %s' % (i + 1, function.llvmFunc.args[i].type)
-					s2 = 'wrong argument type: %s' % params[i].llvmType
-					self._raiseException(RecoverableCompileError, tree=tree.getChild(i + 1), inlineText=s2, postText=s)
+			try:
+				llvmFunc = self._module.get_function_named(mangledName)
+			except LLVMException:
+				llvmFunc = None
 
-		r = self._currentBuilder.call(function.llvmFunc, [x.llvmValue for x in params], 'ret_%s' % callee)
-		return ESValue(r, function.returnType.typename)
+			if not llvmFunc:
+				# function was not declared, yet...
+				llvmFunc = self._module.add_function(esFunction.esType.toLLVMType(), mangledName)
 
-	def _onBasicOperator(self, tree):
-		nodeType = tree.text
-		if tree.getChildCount() == 2 and nodeType in '''* ** // % / and xor or + - < <= == != >= >'''.split():
-			first = tree.getChild(0)
-			second = tree.getChild(1)
-
-			v1 = self._dispatch(first)
-			v2 = self._dispatch(second)
+		ast.llvmValue = self._currentBuilder.call(llvmFunc, params, 'ret_%s' % calleeName.text)
 
 
-			if v1.typename != v2.typename:
-				v1, v2 = self._promoteTypes(v1, v2)
 
-			assert(v1.typename == v2.typename)
+	def _onBasicOperator(self, ast, op, arg1, arg2):
+		tt = TreeType
+
+		# arg1 is always valid, arg2 may be None
+		self._dispatch(arg1)
+		if arg2:
+			self._dispatch(arg2)
+
+		# fetch some types
+		bool = self._findSymbol(name=u'bool', type_=ESType)
+		int32 = self._findSymbol(name=u'int32', type_=ESType)
 
 
-			if nodeType == '*':
-				r = self._currentBuilder.mul(v1.llvmValue, v2.llvmValue)
-				return ESValue(r, v1.typename)
-			elif nodeType == '**':
-				# FIXME we are using the floating point power instead of an integer calculation
-				powiFunc = Function.intrinsic(self._module, INTR_POWI, [Type.double()])
-
-				# FIXME FIXME FIXME FIXME FIXME
-				# convert first argument to double
-				b = self._currentBuilder.sitofp(v1.llvmValue, Type.double())
-				if v2.typename != 'int32':
-					e = self._convertType(v2, u'int32').llvmValue
-				else:
-					e = v2.llvmValue
-
-				
-				r = self._currentBuilder.call(powiFunc, [b, e])
-				return ESValue(self._currentBuilder.fptosi(r, Type.int(32)), u'int32') # FIXME choose better types
-			elif nodeType == '//':# integer division
-				r = self._currentBuilder.sdiv(v1.llvmValue, v2.llvmValue)
-				return ESValue(r, v1.typename)
-			elif nodeType == '/':# floating point division
-				# FIXME use FP div if result is not an integer
-				r = self._currentBuilder.sdiv(v1.llvmValue, v2.llvmValue)
-				return ESValue(r, v1.typename)
-			elif nodeType == '%':
-				r = self._currentBuilder.srem(v1.llvmValue, v2.llvmValue)
-				return ESValue(r, v1.typename)
-			elif nodeType == '+':
-				r = self._currentBuilder.add(v1.llvmValue, v2.llvmValue)
-				return ESValue(r, v1.typename)
-			elif nodeType == '-':
-				r = self._currentBuilder.sub(v1.llvmValue, v2.llvmValue)
-				return ESValue(r, v1.typename)
-			elif nodeType in 'and xor or'.split():
-				# TODO implement short circuiting!
-
-				# first convert parameters to booleans
-				# TODO we should probably use typename and a check against bool
-				if v1.llvmType != Type.int(1):
-					b1 = self._currentBuilder.icmp(IPRED_NE, v1.llvmValue, Constant.int(v1.llvmType, 0))
-				else:
-					b1 = v1.llvmValue
-				if v2.llvmType != Type.int(1):
-					b2 = self._currentBuilder.icmp(IPRED_NE, v2.llvmValue, Constant.int(v2.llvmType, 0))
-				else:
-					b2 = v2.llvmValue
-				
-				# do check
-				if nodeType == 'and':
-					r = self._currentBuilder.and_(b1, b2)
-				elif nodeType == 'xor':
-					r = self._currentBuilder.xor(b1, b2)
-				elif nodeType == 'or':
-					r = self._currentBuilder.or_(b1, b2)
-				else:
-					assert(0 and 'dead code path')
-
-				# and go back to int32
-				r = self._currentBuilder.zext(r, Type.int(32)) # FIXME remove!
-				return ESValue(r, u'int32')
-			elif nodeType in '< <= == != >= >'.split():
-				m = {}
-				m['<'] = IPRED_SLT
-				m['<='] = IPRED_SLE
-				m['=='] = IPRED_EQ
-				m['!='] = IPRED_NE
-				m['>='] = IPRED_SGE
-				m['>'] = IPRED_SGT
-				pred = m[nodeType]
-				assert(v1.llvmType == v2.llvmType and 'types did not match in comp op')
-
-				return ESValue(self._currentBuilder.icmp(pred, v1.llvmValue, v2.llvmValue), u'bool')
+		if op == tt.PLUS:
+			if arg2:
+				ast.llvmValue = self._currentBuilder.add(arg1.llvmValue, arg2.llvmValue)
 			else:
-				assert(0 and 'should never get here')
-		elif tree.getChildCount() == 1 and nodeType in '''- + not'''.split():
-			v1 = self._dispatch(tree.getChild(0))
-
-			if nodeType == '+':
-				return v1
-			elif nodeType == '-':
-				if v1.llvmType.kind == TYPE_INTEGER:
-					r = self._currentBuilder.sub(Constant.int(v1.llvmType, 0), v1.llvmValue)
-					return ESValue(r, v1.typename)
-				else:
-					raise NotImplementedError()
-			elif nodeType == 'not':
-				r = self._currentBuilder.icmp(IPRED_EQ, v1.llvmValue, Constant.int(v1.llvmType, 0))
-
-				return ESValue(self._currentBuilder.zext(r, Type.int(32)), u'int32') # FIXME use bool
+				ast.llvmValue = arg1.llvmValue
+		elif op == tt.MINUS:
+			if arg2:
+				ast.llvmValue = self._currentBuilder.sub(arg1.llvmValue, arg2.llvmValue)
 			else:
-				assert(0 and 'dead code path')
+				ast.llvmValue = self._currentBuilder.sub(Constant.int(arg1.llvmValue.type, 0), arg1.llvmValue)
+		elif op == tt.STAR:
+			ast.llvmValue = self._currentBuilder.mul(arg1.llvmValue, arg2.llvmValue)
+		elif op == tt.SLASH:
+			print arg1.esType, arg2.esType, arg1.llvmValue, arg2.llvmValue
+			if arg1.esType.isEquivalentTo(int32, False):# FIXME should test here for integer signed / integer unsigned / float --> sdiv / udiv / fdiv
+				ast.llvmValue = self._currentBuilder.sdiv(arg1.llvmValue, arg2.llvmValue)
+			else:
+				raise NotImplementedError('TODO')
+		elif op == tt.PERCENT:
+			if arg1.esType.isEquivalentTo(int32, False):# FIXME should test here for integer signed / integer unsigned / float --> sdiv / udiv / fdiv
+				ast.llvmValue = self._currentBuilder.srem(arg1.llvmValue, arg2.llvmValue)
+			else:
+				raise NotImplementedError('TODO')
+		elif op == tt.NOT:
+			ast.llvmValue = self._currentBuilder.not_(arg1.llvmValue)
+		elif op == tt.AND:
+			ast.llvmValue = self._currentBuilder.and_(arg1.llvmValue, arg2.llvmValue)
+		elif op == tt.OR:
+			ast.llvmValue = self._currentBuilder.or_(arg1.llvmValue, arg2.llvmValue)
+		elif op == tt.XOR:
+			ast.llvmValue = self._currentBuilder.xor(arg1.llvmValue, arg2.llvmValue)
+		elif op in [tt.LESS, tt.LESSEQUAL, tt.EQUAL, tt.NOTEQUAL, tt.GREATEREQUAL, tt.GREATER]:
+			# move this code to type annotator!
+			if not arg1.esType.isEquivalentTo(arg2.esType, False):
+				raise NotImplementedError('TODO')
+
+			if not arg1.esType.isEquivalentTo(int32, False): # FIXME replace with check for signed integer
+				raise NotImplementedError('TODO')
+
+			# signed integer code
+			preds = {}
+			preds[tt.LESS] = IPRED_SLT
+			preds[tt.LESSEQUAL] = IPRED_SLE
+			preds[tt.EQUAL] = IPRED_EQ
+			preds[tt.NOTEQUAL] = IPRED_NE
+			preds[tt.GREATEREQUAL] = IPRED_SGE
+			preds[tt.GREATER] = IPRED_SGT
+
+			ast.llvmValue = self._currentBuilder.icmp(preds[op], arg1.llvmValue, arg2.llvmValue)
 		else:
-			raise NotImplementedError('basic operator \'%s\' not yet implemented' % nodeType)
+			raise NotImplementedError('operator not implemented: %s / "%s"' % (op, ast.text))
+
+
 
 	def _simpleAssignment(self, name, value, treeForErrorReporting=None):
 		var = self._scopeStack.find(name)
@@ -864,6 +773,29 @@ class ModuleTranslator(astwalker.ASTWalker):
 			self._simpleAssignment(destination, ESValue(value, temps[i].typename))
 
 
+	def _onCast(self, ast, typename, expression):
+		self._dispatch(expression)
+
+
+		bool = self._findSymbol(name=u'bool', type_=ESType)
+		int32 = self._findSymbol(name=u'int32', type_=ESType)
+
+
+		esType = ast.esType # target type
+		if esType.isEquivalentTo(bool, False):
+			if expression.esType.isEquivalentTo(int32, False): # FIXME make this a check for integer
+				ast.llvmValue = self._currentBuilder.icmp(IPRED_NE, expression.llvmValue, Constant.int(expression.llvmValue.type, 0))
+			else:
+				raise NotImplementedError('cast from %s to %s is not yet supported' % (expression.esType, esType))
+		elif esType.isEquivalentTo(int32, False):
+			if expression.esType.isEquivalentTo(bool, False):
+				ast.llvmValue = self._currentBuilder.zext(expression.llvmValue, int32.toLLVMType())
+			else:
+				raise NotImplementedError('cast from %s to %s is not yet supported' % (expression.esType, esType))
+		else:
+			raise NotImplementedError('cast from %s to %s is not yet supported' % (expression.esType, esType))
+
+
 
 
 #	def _dispatch(self, tree):
@@ -882,31 +814,6 @@ class ModuleTranslator(astwalker.ASTWalker):
 		return self._module
 
 
-
-	def _exportGloballyVisibleSymbols(self):
-		assert(self._module and 'run translateAST first')
-
-		# TODO refactor to avoid accessing details of ScopeStack
-
-		# globally visible symbols
-		d = {}
-		d['package'] = self._packageName
-		d['module'] = self._moduleName
-
-		functions = []
-		d['functions'] = functions
-
-		for key, value in self._scopeStack._stack[0]._functions.items():
-			for x in value:
-				f = {}
-				f['name'] = key
-				f['mangledName'] = x.llvmFunc.name # use direct name
-				f['function'] = x # FIXME use a copy here
-				f['llvmType'] = x.llvmType
-
-				functions.append(f)
-
-		return d
 
 	def _convertType(self, esValue, toType, warn=True):
 		# TODO refactor code into external functions

@@ -179,9 +179,21 @@ class ASTWalker(object):
 			callee = self._onContinue
 		elif t == tt.INTEGER_CONSTANT:
 			callee = self._onIntegerConstant
-			kwargs['constant'] = ast.children[0]
+
+			value = ast.children[0].text.replace('_', '').lower()
+			if value.startswith('0x'):
+				i = int(value[2:], 16)
+			elif value.startswith('0b'):
+				i = int(value[2:], 2)
+			elif value.startswith('0') and len(value) > 1:
+				i = int(value[1:], 8)
+			else:
+				i = int(value)
+
+			kwargs['value'] = i
 		elif t == tt.FLOAT_CONSTANT:
 			callee = self._onFloatConstant
+			# TODO unpack value; see INTEGER_CONSTANT
 			kwargs['constant'] = ast.children[0]
 		elif t == tt.CALLFUNC:
 			callee = self._onCallFunc
@@ -206,8 +218,27 @@ class ASTWalker(object):
 		elif t in [tt.PLUS, tt.MINUS, tt.STAR, tt.DOUBLESTAR, tt.SLASH, tt.PERCENT,
 				tt.NOT, tt.AND, tt.OR, tt.XOR,
 				tt.LESS, tt.LESSEQUAL, tt.EQUAL, tt.NOTEQUAL, tt.GREATEREQUAL, tt.GREATER]:
-			# TODO
 			callee = self._onBasicOperator
+
+			n = len(ast.children)
+			v1 = ast.children[0]
+			v2 = None
+			op = t
+
+			if n == 1:
+				pass
+			elif n == 2:
+				v2 = ast.children[1]
+			else:
+				assert(0 and 'dead code path')
+			
+			kwargs['op'] = op
+			kwargs['arg1'] = v1
+			kwargs['arg2'] = v2
+		elif t == tt.CAST:
+			callee = self._onCast
+			kwargs['typename'] = ast.children[0]
+			kwargs['expression'] = ast.children[1]
 		else:
 			assert(0 and 'dead code path / support for new token type not implemented')
 

@@ -54,19 +54,18 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		for k, v in estypesystem.elementaryTypes.items():
 			st.addSymbol(k, v)
 
-	def _createCastNode(self, exprNode, fromTypeName, toTypeName):
-		# build an AST node like it would be created by the parser
-		# esType information is added by the caller
+	
+	def _insertCastNode(self, exprNode, toTypeName):
+		newExprNode = exprNode.copy(True)
+		typeNameNode = exprNode.copy(False)
 
-		t = exprNode.copy(False) # copy line info
-		t.type = TreeType.CAST
-		t.text = u'CAST'
+		typeNameNode.type = TreeType.NAME # FIXME this should be later a typename node
+		typeNameNode.text = toTypeName
 
-		t.addChild(exprNode.copy(True))
-		t.addChild(Tree(fromTypeName))
-		t.addChild(Tree(toTypeName))
-
-		return t
+		exprNode.type = TreeType.CAST
+		exprNode.text = u'CAST'
+		exprNode.children = [typeNameNode, newExprNode]
+		exprNode.esType = self._findSymbol(name=toTypeName, type_=ESType)
 
 
 	def _onModuleStart(self, ast, packageName, moduleName, statements):
@@ -306,55 +305,97 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 					if not estypesystem.canImplicitlyCast(t, returnTypes[i]):
 						self._raiseException(RecoverableCompileError, tree=expressions[i], inlineText='incompatible return type')
 
-					# TODO insert CAST node
+					self._insertCastNode(expressions[i], u'int32') # FIXME use real type
 
 
 
-	def _onIntegerConstant(self, ast, constant):
-		# FIXME really determine type of constant
-		ast.esType = self._findSymbol(name=u'int32', type_=ESType)
+	def _onIntegerConstant(self, ast, value):
+		signed = True # default, if nothing is specified
 
-
-	def _onBasicOperator(self, ast):
-		nodeType = ast.text # FIXME use ast.type
-		if ast.getChildCount() == 2 and nodeType in u'''* ** % / and xor or + - < <= == != >= >'''.split():
-			self._dispatch(ast.children[0])
-			self._dispatch(ast.children[1])
-
-			left = ast.children[0]
-			right = ast.children[1]
-
-			esBool = self._findSymbol(name=u'bool', type_=ESType)
-
-			if nodeType in u'* ** % / + -'.split():
-				if left.esType.isEquivalentTo(right.esType, False):
-					ast.esType = left.esType
-				else:
-					raise NotImplementedError('FIXME TODO')
-			elif nodeType in u'and xor or'.split():
-				#if left.esType.isEquivalentTo(right.esType, False) and left.esType.isEquivalentTo(esBool, False):
-					ast.esType = esBool
-				#else:
-				#	raise NotImplementedError('FIXME TODO')
-			elif nodeType in u'< <= == != >= >'.split():
-				#if left.esType.isEquivalentTo(right.esType, False):
-					ast.esType = esBool
-				#else:
-				#	raise NotImplementedError('FIXME TODO')
+		if signed:
+			if -(2 ** 7) <= value <= 2 ** 7 - 1:
+				bits = 8
+			elif -(2 ** 15) <= value <= 2 ** 15 - 1:
+				bits = 16
+			elif -(2 ** 31) <= value <= 2 ** 31 - 1:
+				bits = 32
+			elif -(2 ** 63) <= value <= 2 ** 63 - 1:
+				bits = 64
 			else:
-				raise NotImplementedError('FIXME TODO: %s' % nodeType)
-		elif ast.getChildCount() == 1 and nodeType in u'''- + not'''.split():
-			self._dispatch(ast.children[0])
-
-			if nodeType in u'- +'.split():
-				ast.esType = ast.children[0].esType
-			elif nodeType == u'not':
-				# TODO add implicit conversion to bool, if necessary
-				ast.esType = self._findSymbol(name=u'bool', type_=ESType)
-			else:
-				assert(0 and 'dead code path')
+				self._raiseException(RecoverableCompileError, tree=ast, inlineText='constant can not be represented by an int64')
 		else:
-			assert(0 and 'dead code path')
+			raise NotImplementedError('uintN not supported, yet')
+
+		# FIXME enforce a default type
+		if bits < 32:
+			bits = 32
+
+		if signed:
+			ast.esType = self._findSymbol(name=u'int%d' % bits, type_=ESType)
+		else:
+			ast.esType = self._findSymbol(name=u'uint%d' % bits, type_=ESType)
+
+
+	def _onBasicOperator(self, ast, op, arg1, arg2):
+		tt = TreeType
+
+		# arg1 is always valid, arg2 may be None
+		self._dispatch(arg1)
+		if arg2:
+			self._dispatch(arg2)
+
+		# fetch some types
+		bool = self._findSymbol(name=u'bool', type_=ESType)
+		int32 = self._findSymbol(name=u'int32', type_=ESType)
+
+
+		if op in [tt.AND, tt.XOR, tt.OR]:
+			if not arg1.esType.isEquivalentTo(bool, False):
+				self._insertCastNode(arg1, u'bool')
+
+			if not arg2.esType.isEquivalentTo(bool, False):
+				self._insertCastNode(arg2, u'bool')
+
+			ast.esType = bool
+		elif op in [tt.NOT]:
+			if not arg1.esType.isEquivalentTo(bool, False):
+				self._insertCastNode(arg1, u'bool')
+
+			ast.esType = bool
+		elif op in [tt.PLUS, tt.MINUS]:
+			if not arg2:
+				ast.esType = arg1.esType
+				return
+
+			if arg1.esType.isEquivalentTo(arg2.esType, False):
+				ast.esType = arg1.esType
+				return
+
+			raise NotImplementedError('TODO')
+		elif op in [tt.STAR, tt.SLASH, tt.PERCENT]:
+			if arg1.esType.isEquivalentTo(arg2.esType, False):
+				ast.esType = arg1.esType
+				return
+
+			print arg1.esType, arg2.esType
+
+			raise NotImplementedError('TODO')
+		elif op in [tt.DOUBLESTAR]:
+			if not arg1.esType.isEquivalentTo(arg2.esType, False):
+				raise NotImplementedError('TODO')
+
+			# FIXME
+			if not arg1.esType.isEquivalentTo(int32, False):
+				raise NotImplementedError('TODO')
+
+			ast.esType = int32
+		elif op in [tt.LESS, tt.LESSEQUAL, tt.EQUAL, tt.NOTEQUAL, tt.GREATEREQUAL, tt.GREATER]:
+			if not arg1.esType.isEquivalentTo(arg2.esType, False):
+				raise NotImplementedError('TODO')
+
+			ast.esType = bool
+		else:
+			raise NotImplementedError('operator not implemented: %s / %s' % (op, ast.text))
 
 
 	def _onCallFunc(self, ast, calleeName, expressions):
@@ -378,7 +419,8 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		returnTypes = callee.esType.getFunctionReturnTypes()
 		assert(len(returnTypes) == 1)
 
-		ast.esType = returnTypes[0]
+		ast.esType = returnTypes[0] # TODO implement support for multiple return values
+		ast.esFunction = callee
 
 
 	def _onVariable(self, ast, variableName):
@@ -394,7 +436,8 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			if not estypesystem.canImplicitlyCast(esType, self._findSymbol(name=u'bool', type_=ESType)):
 				self._raiseException(RecoverableCompileError, tree=expression, inlineText='expression is of incompatible type. expected bool')
 
-			# TODO insert CAST node
+			self._insertCastNode(expression, u'bool')
+
 
 	def _onIf(self, ast, expressions, blocks, elseBlock):
 		for x in expressions:
@@ -407,7 +450,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 				if not estypesystem.canImplicitlyCast(esType, self._findSymbol(name=u'bool', type_=ESType)):
 					self._raiseException(RecoverableCompileError, tree=expressions[i], inlineText='expression is of incompatible type. expected bool')
 
-				# TODO insert CAST node
+				self._insertCastNode(expressions[i], u'bool')
 
 		for x in blocks:
 			self._dispatch(x)
@@ -441,6 +484,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 					self._raiseException(RecoverableCompileError, tree=exprNode, inlineText='incompatible type')
 
 				# TODO insert CAST node
+				raise NotImplementedError('insert cast node here')
 
 
 	
