@@ -241,7 +241,6 @@ class ModuleTranslator(astwalker.ASTWalker):
 			bb = self._currentBuilder.block
 			if not (bb.instructions and bb.instructions[-1].is_terminator):
 				s = self._generateContext(preText='warning:', postText='control flow possibly reaches end of non-void function. Inserting trap instruction...', lineBase1=block.line, numAfter=3)
-				print s
 				trapFunc = Function.intrinsic(self._module, INTR_TRAP, []);
 				self._currentBuilder.call(trapFunc, [])
 				self._currentBuilder.ret(Constant.int(Type.int(32), -1)) # and return, otherwise func.verify will fail
@@ -539,7 +538,6 @@ class ModuleTranslator(astwalker.ASTWalker):
 	def _onVariable(self, ast, variableName):
 
 		var = self._findSymbol(fromTree=variableName, type_=ESVariable)
-		print self._findCurrentFunction().name, variableName.text, var
 		ast.llvmValue = self._currentBuilder.load(var.llvmRef)
 
 
@@ -571,25 +569,9 @@ class ModuleTranslator(astwalker.ASTWalker):
 		return ref
 
 
-	def _onDefVariable(self, tree):
-		assert(tree.text == 'DEFVAR')
-
-		varName = tree.getChild(0).text
-		varType = tree.getChild(1).text
-
-		raiseUnknownType = (lambda: self._raiseException(RecoverableCompileError, tree=tree.getChild(1), inlineText='unknown type'))
-		if varType.startswith('int') and varType[3].isdigit():
-			numBits = int(varType[3:])
-
-			if numBits not in [8, 16, 32, 64]:
-				raiseUnknownType()
-				
-
-			llvmType = Type.int(numBits)
-		else:
-			raiseUnknownType()
-
-		self._createAllocaForVar(varName, llvmType, varType, treeForErrorReporting=tree.getChild(0))
+	def _onDefVariable(self, ast, variableName, typeName):
+		var = self._findSymbol(fromTree=variableName, type_=ESVariable)
+		var.llvmRef = self._createAllocaForVar(variableName.text, var.esType.toLLVMType())
 
 
 	def _onCallFunc(self, ast, calleeName, expressions):
@@ -697,54 +679,24 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 
 
-	def _simpleAssignment(self, name, value, treeForErrorReporting=None):
-		var = self._scopeStack.find(name)
-		if var:
-			# something with this name exists -> check type
-			if not isinstance(var, ESVariable):
-				s1 = 'not a variable'
-				self._raiseException(RecoverableCompileError, tree=treeForErrorReporting, inlineText=s1)
-
-			# check type
-			if value.llvmType != var.llvmType.pointee:# FIXME use typename check?
-				value = self._convertType(value, var.typename)
-				#s1 = 'expression is of incompatible type'
-				#s2 = 'lhs type: %s; rhs type: %s' % (var.typename, value.typename)
-				#self._raiseException(RecoverableCompileError, tree=treeForErrorReporting, inlineText=s1, postText=s2)
-			self._currentBuilder.store(value.llvmValue, var.llvmRef)
-		else:
-			# new variable
-			# do not pass value when creating the variable! The value is NOT available in the entry block (at least in general)!
-			self._createAllocaForVar(name, value.llvmType, value.typename, treeForErrorReporting=treeForErrorReporting)
-
-			var = self._scopeStack.find(name)
-			assert(isinstance(var, ESVariable))
-			self._currentBuilder.store(value.llvmValue, var.llvmRef)
-		
-		return var
+	def _simpleAssignment(self, var, llvmValue):
+		if not hasattr(var, 'llvmRef'):
+			# does not have an associated alloca, yet
+			# we MUST NOT pass a value to _createAllocaForVar! That value is not available in the entry BB!
+			var.llvmRef = self._createAllocaForVar(var.name, var.esType.toLLVMType())
 
 
-	def _onAssign(self, tree):
-		assert(tree.text == '=')
-		assert(tree.getChildCount() == 2) # require desugar
-
-		varName = tree.children[0].text
-		value = self._dispatch(tree.children[1])
-
-		self._simpleAssignment(varName, value, treeForErrorReporting=tree.children[1])
+		self._currentBuilder.store(llvmValue, var.llvmRef)
 
 
-	def _onListAssign(self, tree):
-		assert(tree.text == 'LISTASSIGN')
+	def _onAssign(self, ast, variableName, expression):
+		self._dispatch(expression)
 
-		lhs = tree.getChild(0)
-		assert(lhs.text == 'ASSIGNLIST')
-		rhs = tree.getChild(1)
-		assert(rhs.text == 'ASSIGNLIST')
+		var = self._findSymbol(fromTree=variableName, type_=ESVariable)
+		self._simpleAssignment(var, expression.llvmValue)
 
-		assert(lhs.getChildCount() == rhs.getChildCount() and 'different number of assignees and expressions')
-		n = rhs.getChildCount()
 
+	def _onListAssign(self, ast, variableNames, expressions):
 		# use a very simple aproach:
 		# copy source variables into temporary variables
 		# copy data from temporary variables to destination variables
@@ -753,19 +705,24 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 		# copy source -> temp
 		temps = []
+		n = len(variableNames)
+		assert(n == len(expressions))
 		for i in range(n):
-			value = self._dispatch(rhs.getChild(i))
-			ref = self._currentBuilder.alloca(value.llvmType, u'listassign_tmp')
-			self._currentBuilder.store(value.llvmValue, ref)
-			temps.append(ESVariable(ref, value.typename, u'listassign_tmp'))
+			self._dispatch(expressions[i])
+
+			ref = self._currentBuilder.alloca(expressions[i].esType.toLLVMType(), u'listassign_tmp')
+			self._currentBuilder.store(expressions[i].llvmValue, ref)
+
+			esVar = ESVariable(u'listassign_tmp', expressions[i].esType)
+			esVar.llvmRef = ref
+			temps.append(esVar)
 
 		# copy temp -> destination
 		# this is a simple assignment
 		for i in range(n):
+			var = self._findSymbol(fromTree=variableNames[i], type_=ESVariable)
 			value = self._currentBuilder.load(temps[i].llvmRef)
-			destination = lhs.getChild(i).text
-
-			self._simpleAssignment(destination, ESValue(value, temps[i].typename))
+			self._simpleAssignment(var, value)
 
 
 	def _onCast(self, ast, typename, expression):
