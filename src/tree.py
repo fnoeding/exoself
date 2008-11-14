@@ -29,6 +29,9 @@
 # 
 
 # store token types in a class
+import copy
+
+
 class TreeType(object):
 	pass
 
@@ -71,13 +74,14 @@ class Tree(object):
 
 
 	def copy(self, copyChildren):
-		t = Tree(self.type, self.text, self.line, self.charPos)
+		# we must also copy additional attributes!
 
 		if copyChildren:
-			for x in self.children:
-				t.children.append(x.copy(copyChildren))
-
-		return t
+			return copy.deepcopy(self)
+		else:
+			t = copy.deepcopy(self) # TODO this is slower but will always work, use copy.copy instead? might cause problems with 'unknown' attributes
+			t.children = []
+			return t
 
 
 	def getChildCount(self):
