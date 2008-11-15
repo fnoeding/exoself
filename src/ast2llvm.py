@@ -439,43 +439,33 @@ class ModuleTranslator(astwalker.ASTWalker):
 		self._currentBuilder = Builder.new(mergeBB)
 
 
-	def _onWhile(self, tree):
-		assert(tree.text == 'while')
+	def _onWhile(self, ast, expression, block):
 
+		# create blocks
+		llvmFunc = self._findCurrentFunction().llvmRef
+		headBB = llvmFunc.append_basic_block('head')
+		bodyBB = llvmFunc.append_basic_block('body')
+		mergeBB = llvmFunc.append_basic_block('merge')
 
-		with ScopeStackWithProxy(self._scopeStack):
-			# create blocks
-			headBB = self._currentFunction.llvmFunc.append_basic_block('head')
-			bodyBB = self._currentFunction.llvmFunc.append_basic_block('body')
-			# TODO think about an else block which gets executed iff the body is not executed at least once
-			mergeBB = self._currentFunction.llvmFunc.append_basic_block('merge')
+		# branch to headBB / enter loop
+		self._currentBuilder.branch(headBB)
 
-			# branch to headBB / enter loop
-			self._currentBuilder.branch(headBB)
+		# create test
+		self._currentBuilder = Builder.new(headBB)
+		self._dispatch(expression)
+		self._currentBuilder.cbranch(expression.llvmValue, bodyBB, mergeBB)
 
-			# create test
-			self._currentBuilder = Builder.new(headBB)
-			loopExpr = self._dispatch(tree.getChild(0))
-			if loopExpr.llvmType != Type.int(1):# FIXME use typenames?
-				# FIXME use conversion to bool
-				loopExpr = ESValue(self._currentBuilder.icmp(IPRED_NE, loopExpr.llvmValue, 0), u'bool')
+		# build body
+		self._currentBuilder = Builder.new(bodyBB)
+		ast.breakTarget = mergeBB
+		ast.continueTarget = headBB
+		
+		self._dispatch(block)
 
-			self._currentBuilder.cbranch(loopExpr.llvmValue, bodyBB, mergeBB)
+		self._currentBuilder.branch(headBB)
 
-			# build body
-			self._currentBuilder = Builder.new(bodyBB)
-			self._breakTargets.append(mergeBB)
-			self._continueTargets.append(headBB)
-			try:
-				self._dispatch(tree.getChild(1))
-			finally:
-				self._breakTargets.pop()
-				self._continueTargets.pop()
-
-			self._currentBuilder.branch(headBB)
-
-			# continue with mergeBB
-			self._currentBuilder = Builder.new(mergeBB)
+		# continue with mergeBB
+		self._currentBuilder = Builder.new(mergeBB)
 
 
 	def _onBreak(self, ast):
