@@ -368,95 +368,75 @@ class ModuleTranslator(astwalker.ASTWalker):
 		self._currentBuilder = Builder.new(mergeBB)
 		
 
-	def _onFor(self, tree):
-		assert(tree.text == 'for')
+	def _onFor(self, ast, variableName, rangeStart, rangeStop, rangeStep, block):
 
-		loopVarName = tree.getChild(0).text
-		loopBody = tree.getChild(2)
-		loopExpression = tree.getChild(1)
-		assert(loopExpression.text == 'range')
-		assert(1 <= loopExpression.getChildCount() <= 3)
-		n = loopExpression.getChildCount()
 
-		with ScopeStackWithProxy(self._scopeStack):
-			inductVar = self._scopeStack.find(loopVarName)
-			if inductVar:
-				assert(inductVar.llvmType.pointee == Type.int(32)) # 'range' expects some kind of integer...
-			else:
-				inductVar = self._createAllocaForVar(loopVarName, Type.int(32), u'int32')# FIXME determine types from range!
-			start = ESValue(Constant.int(inductVar.llvmType.pointee, 0), inductVar.typename)
-			step = ESValue(Constant.int(inductVar.llvmType.pointee, 1), inductVar.typename)
+		if rangeStart:
+			self._dispatch(rangeStart)
+			start = rangeStart.llvmValue
+		else:
+			start = Constant.int(Type.int(32), 0) # FIXME allow other types
+		self._dispatch(rangeStop)
+		stop = rangeStop.llvmValue
+		if rangeStep:
+			self._dispatch(rangeStep)
+			step = rangeStep.llvmValue
+		else:
+			step = Constant.int(Type.int(32), 1) # FIXME allow other types
 
-			# TODO emit warnings if range would overflow induct var type
+		inductVar = self._findSymbol(fromTree=variableName, type_=ESVariable)
+		if not hasattr(inductVar, 'llvmRef'):
+			inductVar.llvmRef = self._createAllocaForVar(variableName.text, inductVar.esType.toLLVMType())
 
-			if n == 1:
-				stop = self._dispatch(loopExpression.getChild(0))
-			elif n == 2:
-				start = self._dispatch(loopExpression.getChild(0))
-				stop = self._dispatch(loopExpression.getChild(1))
-			elif n == 3:
-				start = self._dispatch(loopExpression.getChild(0))
-				stop = self._dispatch(loopExpression.getChild(1))
-				step = self._dispatch(loopExpression.getChild(2))
+		# setup loop by initializing induction variable
+		self._currentBuilder.store(start, inductVar.llvmRef)
 
-			# convert types
-			if stop.typename != inductVar.typename:
-				stop = self._convertType(stop, inductVar.typename)
-			if step.typename != inductVar.typename:
-				step = self._convertType(step, inductVar.typename)
-			if start.typename != inductVar.typename:
-				start = self._convertType(start, inductVar.typename)
+		# create blocks
+		llvmFunc = self._findCurrentFunction().llvmRef
+		headBB = llvmFunc.append_basic_block('head') # decide between Up and Down
+		headDownBB = llvmFunc.append_basic_block('headDown')
+		headUpBB = llvmFunc.append_basic_block('headUp')
+		bodyBB = llvmFunc.append_basic_block('body')
+		stepBB = llvmFunc.append_basic_block('step')
+		# TODO: think about implementing an 'else' block, that gets called when the loop does not get executed
+		mergeBB = llvmFunc.append_basic_block('merge')
 
-			# setup loop by initializing induction variable
-			self._currentBuilder.store(start.llvmValue, inductVar.llvmRef)
+		self._currentBuilder.branch(headBB)
 
-			# create blocks
-			headBB = self._currentFunction.llvmFunc.append_basic_block('head') # decide between Up and Down
-			headDownBB = self._currentFunction.llvmFunc.append_basic_block('headDown')
-			headUpBB = self._currentFunction.llvmFunc.append_basic_block('headUp')
-			bodyBB = self._currentFunction.llvmFunc.append_basic_block('body')
-			stepBB = self._currentFunction.llvmFunc.append_basic_block('step')
-			# TODO: think about implementing an 'else' block, that gets called when the loop does not get executed
-			mergeBB = self._currentFunction.llvmFunc.append_basic_block('merge')
+		# setup continue / break targets
+		ast.breakTarget = mergeBB
+		ast.continueTarget = stepBB
 
-			self._currentBuilder.branch(headBB)
+		# count up or down?
+		b = Builder.new(headBB)
+		cond = b.icmp(IPRED_SGT, step, Constant.int(step.type, 0))
+		b.cbranch(cond, headUpBB, headDownBB)
 
-			# count up or down?
-			b = Builder.new(headBB)
-			cond = b.icmp(IPRED_SGT, step.llvmValue, Constant.int(step.llvmType, 0))
-			b.cbranch(cond, headUpBB, headDownBB)
+		# count down check
+		b = Builder.new(headDownBB)
+		cond = b.icmp(IPRED_SGT, b.load(inductVar.llvmRef), stop)
+		b.cbranch(cond, bodyBB, mergeBB)
 
-			# count down check
-			b = Builder.new(headDownBB)
-			cond = b.icmp(IPRED_SGT, b.load(inductVar.llvmRef), stop.llvmValue)
-			b.cbranch(cond, bodyBB, mergeBB)
+		# count up check
+		b = Builder.new(headUpBB)
+		cond = b.icmp(IPRED_SLT, b.load(inductVar.llvmRef), stop)
+		b.cbranch(cond, bodyBB, mergeBB)
 
-			# count up check
-			b = Builder.new(headUpBB)
-			cond = b.icmp(IPRED_SLT, b.load(inductVar.llvmRef), stop.llvmValue)
-			b.cbranch(cond, bodyBB, mergeBB)
+		# build loop body
+		self._currentBuilder = Builder.new(bodyBB)
+		self._dispatch(block)
 
-			# build loop body
-			self._currentBuilder = Builder.new(bodyBB)
-			self._breakTargets.append(mergeBB)
-			self._continueTargets.append(stepBB)
-			try:
-				self._dispatch(loopBody)
-			finally:
-				self._breakTargets.pop()
-				self._continueTargets.pop()
+		# end loop body with branch to stepBB
+		self._currentBuilder.branch(stepBB)
 
-			# end loop body with branch to stepBB
-			self._currentBuilder.branch(stepBB)
+		# now increment inductVar and branch back to head for another round
+		b = Builder.new(stepBB)
+		r = b.add(b.load(inductVar.llvmRef), step)
+		b.store(r, inductVar.llvmRef)
+		b.branch(headBB)
 
-			# now increment inductVar and branch back to head for another round
-			b = Builder.new(stepBB)
-			r = b.add(b.load(inductVar.llvmRef), step.llvmValue)
-			b.store(r, inductVar.llvmRef)
-			b.branch(headBB)
-
-			# done! continue outside loop body
-			self._currentBuilder = Builder.new(mergeBB)
+		# done! continue outside loop body
+		self._currentBuilder = Builder.new(mergeBB)
 
 
 	def _onWhile(self, tree):
@@ -498,21 +478,28 @@ class ModuleTranslator(astwalker.ASTWalker):
 			self._currentBuilder = Builder.new(mergeBB)
 
 
-	def _onBreak(self, tree):
-		assert(tree.text == 'break')
+	def _onBreak(self, ast):
+		target = None
+		for n in reversed(self._nodes):
+			if hasattr(n, 'breakTarget'):
+				target = n.breakTarget
+				break
 
-		if not self._breakTargets:
-			self._raiseException(RecoverableCompileError, tree=tree, inlineText='break is only possible inside loop or switch statements')
-		self._currentBuilder.branch(self._breakTargets[-1])
+		assert(target and 'type checker should make sure that there is a break target')
+
+		self._currentBuilder.branch(target)
 
 
-	def _onContinue(self, tree):
-		assert(tree.text == 'continue')
+	def _onContinue(self, ast):
+		target = None
+		for n in reversed(self._nodes):
+			if hasattr(n, 'continueTarget'):
+				target = n.continueTarget
+				break
 
-		if not self._continueTargets:
-			self._raiseException(RecoverableCompileError, tree=tree, inlineText='continue is only possible inside loop statements')
+		assert(target and 'type checker should make sure that there is a break target')
 
-		self._currentBuilder.branch(self._continueTargets[-1])
+		self._currentBuilder.branch(target)
 		
 
 	def _onPass(self, ast):

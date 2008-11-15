@@ -533,6 +533,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		if rangeStep:
 			self._dispatch(rangeStep)
 
+		# TODO emit warnings if range would overflow induct var type
 
 		# FIXME for now only int32 support
 		int32 = self._findSymbol(name=u'int32', type_=ESType)
