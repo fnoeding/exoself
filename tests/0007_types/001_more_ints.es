@@ -23,15 +23,6 @@ def main() as int32
 	assert b64 == 10;
 	assert (a64 * b64) == 20_000_000_000;
 
-	a32 as int32;
-	b32 as int32;
-	c32 as int32;
-	c32 = 1234;
-	a32 = a8 = b32 = c32;
-	assert b32 == c32;
-	assert a8 == -46;
-	assert a32 == -46;
-
 
 	return 0;
 }
