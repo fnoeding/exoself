@@ -680,7 +680,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 			self._simpleAssignment(var, value)
 
 
-	def _onCast(self, ast, typename, expression):
+	def _onCast(self, ast, expression, typeName):
 		self._dispatch(expression)
 
 

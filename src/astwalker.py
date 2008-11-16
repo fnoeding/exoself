@@ -248,10 +248,10 @@ class ASTWalker(object):
 			kwargs['op'] = op
 			kwargs['arg1'] = v1
 			kwargs['arg2'] = v2
-		elif t == tt.CAST:
+		elif t == tt.CAST or t == tt.IMPLICITCAST:# these are handled exactly equal, IMPLICITCAST only makes debugging easier
 			callee = self._onCast
-			kwargs['typename'] = ast.children[0]
-			kwargs['expression'] = ast.children[1]
+			kwargs['expression'] = ast.children[0]
+			kwargs['typeName'] = ast.children[1]
 		else:
 			assert(0 and 'dead code path / support for new token type not implemented')
 

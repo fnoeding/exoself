@@ -105,9 +105,9 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		typeNameNode.type = TreeType.NAME # FIXME this should be later a typename node
 		typeNameNode.text = toTypeName
 
-		exprNode.type = TreeType.CAST # TODO make this IMPLICITCAST to see the difference?
-		exprNode.text = u'CAST'
-		exprNode.children = [typeNameNode, newExprNode]
+		exprNode.type = TreeType.IMPLICITCAST
+		exprNode.text = u'IMPLICITCAST'
+		exprNode.children = [newExprNode, typeNameNode]
 		exprNode.esType = targetT
 
 
@@ -661,6 +661,13 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 
 		self._dispatch(block)
+
+	def _onCast(self, ast, expression, typeName):
+		self._dispatch(expression)
+
+		# TODO make sure there exists a conversion operator
+
+		ast.esType = self._findSymbol(fromTree=typeName, type_=ESType)
 
 
 
