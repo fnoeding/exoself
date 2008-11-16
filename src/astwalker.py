@@ -274,6 +274,16 @@ class ASTWalker(object):
 		if postText:
 			s.append(postText)
 
+		# TODO add compiler switch that disables this info
+		if True:
+			import inspect
+			s.append('debug info')
+			s.append('\tAST walker class: %s' % type(self))
+			stack = inspect.stack(10)
+			for x in stack:
+				ss = '\t' + x[3]
+				s.append(ss)
+
 
 		return '\n'.join(s) + '\n'
 
