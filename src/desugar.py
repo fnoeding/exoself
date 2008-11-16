@@ -133,9 +133,28 @@ def _desugarMultiAssign(tree):
 		i += 1
 
 
+def _desugarNegativeNumberConstants(tree):
+	# problem: numbers like -32768h are represented as a unary MINUS node and a INTEGER_CONSTANT node with type int16. But the 32768h is not a int16 number!
+
+	if tree.type != TreeType.MINUS:
+		return
+
+	if len(tree.children) != 1:
+		return
+
+	# make a PLUS node out of this node, and move the sign into the constant
+	tree.type = TreeType.PLUS
+	tree.text = u'+'
+
+	constNode = tree.children[0]
+	valueNode = constNode.children[0]
+
+	valueNode.text = '-' + valueNode.text # numbers are always positive!
+
+
 
 # actions get called for every node
-_actions = [_desugarLoopElse, _fixPackageAndModuleNames]
+_actions = [_desugarLoopElse, _fixPackageAndModuleNames, _desugarNegativeNumberConstants]
 # special actions traverse the tree themselves
 _specialActions = [_desugarMultiAssign]
 

@@ -98,8 +98,16 @@ fragment BinaryDigit: '0' | '1';
 fragment SpacedBinaryDigit: BinaryDigit ((BinaryDigit | '_')* BinaryDigit)?;
 fragment Float: Digit* '.' Digit+ (('e' | 'E') ('+' | '-')? Digit+)?;
 
+fragment IntegerSuffix:
+		('u')? // unsigned
+		(
+			'hh' // int8
+			| 'h' // int16
+			// int32 has no suffix
+			| 'l' // int64
+		);
 
-INTEGER: SpacedDigit | ('0x' | '0X') SpacedHexDigit | ('0b' | '0B') SpacedBinaryDigit;// octal integers are also matched by SpacedDigit
+INTEGER: (SpacedDigit | ('0x' | '0X') SpacedHexDigit | ('0b' | '0B') SpacedBinaryDigit) IntegerSuffix?;// octal integers are also matched by SpacedDigit
 FLOAT: Float;// TODO HexFloat for exact representation
 NAME: (Letter | '_') (Letter | Digit | '_')*;
 

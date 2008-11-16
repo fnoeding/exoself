@@ -483,7 +483,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 	def _onPass(self, ast):
 		pass
 
-	def _onIntegerConstant(self, ast, value):
+	def _onIntegerConstant(self, ast, value, suffix):
 		ast.llvmValue = Constant.int(ast.esType.toLLVMType(), value)
 
 

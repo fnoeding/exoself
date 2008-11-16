@@ -349,10 +349,14 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 
 
-	def _onIntegerConstant(self, ast, value):
+	def _onIntegerConstant(self, ast, value, suffix):
 		''' added attributes: signed, minBits, bits '''
 
-		signed = True # default, if nothing is specified
+		if suffix and suffix[0] == 'u':
+			signed = False
+			suffix = suffix[1:]
+		else:
+			signed = True # default
 
 		if signed:
 			if -(2 ** 7) <= value <= 2 ** 7 - 1:
@@ -371,9 +375,21 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		ast.signed = signed
 		ast.minBits = bits
 
-		# FIXME enforce a default type
-		if bits < 32:
-			bits = 32
+		# enforce a default type
+		if not suffix:
+			if bits < 32:
+				bits = 32
+		elif suffix == 'hh':
+			if bits > 8:
+				self._raiseException(RecoverableCompileError, tree=ast, inlineText='constant can not be represented in the requested type')
+		elif suffix == 'h':
+			if bits > 16:
+				self._raiseException(RecoverableCompileError, tree=ast, inlineText='constant can not be represented in the requested type')
+		elif suffix == 'l':
+			if bits > 64:
+				self._raiseException(RecoverableCompileError, tree=ast, inlineText='constant can not be represented in the requested type')
+		else:
+			self._raiseException(RecoverableCompileError, tree=ast, inlineText='unknown integer suffix')
 
 		ast.bits = bits
 

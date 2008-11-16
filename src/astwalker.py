@@ -180,7 +180,19 @@ class ASTWalker(object):
 		elif t == tt.INTEGER_CONSTANT:
 			callee = self._onIntegerConstant
 
-			value = ast.children[0].text.replace('_', '').lower()
+			value = ast.children[0].text.replace('_', '')
+			suffix = []
+			for x in reversed(value):
+				if x.lower() in '01234567890abcdef':
+					break
+
+				suffix.insert(0, x)
+			suffix = u''.join(suffix)
+
+			if suffix:
+				value = value[:-len(suffix)]
+			value = value.lower()
+
 			if value.startswith('0x'):
 				i = int(value[2:], 16)
 			elif value.startswith('0b'):
@@ -191,6 +203,7 @@ class ASTWalker(object):
 				i = int(value)
 
 			kwargs['value'] = i
+			kwargs['suffix'] = suffix
 		elif t == tt.FLOAT_CONSTANT:
 			callee = self._onFloatConstant
 			# TODO unpack value; see INTEGER_CONSTANT
