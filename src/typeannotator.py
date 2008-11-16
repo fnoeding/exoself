@@ -87,6 +87,8 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			# use filename
 			# TODO error / warn if filename is not a suitable module name
 			ast.moduleName = os.path.split(self._filename)[1]
+			if ast.moduleName.endswith('.es'):
+				ast.moduleName = ast.moduleName[:-3]
 
 		# make sure module name is valid
 		m = re.match('[a-zA-Z_][a-zA-Z_0-9]*', ast.moduleName)
@@ -94,7 +96,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		if m and m.span() == (0, len(ast.moduleName)):
 			bad = False
 		if bad:
-			self._raiseException(CompileError, postText='Module filenames should begin with alpha character or underscore otherwise it\'s not possible to import them. To disable this error message set a valid module name using the \'module\' statement.')
+			self._raiseException(CompileError, postText='Module filenames should begin with alpha character or underscore otherwise it\'s not possible to import them. To disable this error message set a valid module name using the \'module\' statement: %s' % ast.moduleName)
 
 
 		############################################
