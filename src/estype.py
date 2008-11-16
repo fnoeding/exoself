@@ -219,9 +219,9 @@ class ESType(object):
 				return Type.int(1)
 			elif t == u'void':
 				return Type.void()
-			elif t == u'single':
+			elif t == u'float32':
 				return Type.float()
-			elif t == u'double':
+			elif t == u'float64':
 				return Type.double()
 			else:
 				raise NotImplementedError('conversion to LLVM type is not supported for elementary type: %s' % t)

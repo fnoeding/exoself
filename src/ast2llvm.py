@@ -686,7 +686,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 		bool = self._findSymbol(name=u'bool', type_=ESType)
 		int32 = self._findSymbol(name=u'int32', type_=ESType)
-		double = self._findSymbol(name=u'double', type_=ESType)
+		float64 = self._findSymbol(name=u'float64', type_=ESType)
 
 		targetT = ast.esType
 		sourceT = expression.esType
@@ -718,11 +718,11 @@ class ModuleTranslator(astwalker.ASTWalker):
 					ast.llvmValue = self._currentBuilder.sext(expression.llvmValue, t)
 				else:
 					assert(0 and 'dead code path; should have been caught by other checks!')
-			elif sourceT.isEquivalentTo(double, False):
+			elif sourceT.isEquivalentTo(float64, False):
 				ast.llvmValue = self._currentBuilder.fptosi(expression.llvmValue, targetT.toLLVMType())
 			else:
 				bad = True
-		elif targetT.isEquivalentTo(double, False): # FIXME make this a check for floating point
+		elif targetT.isEquivalentTo(float64, False): # FIXME make this a check for floating point
 			if sourceT.isSignedInteger():
 				ast.llvmValue = self._currentBuilder.sitofp(expression.llvmValue, targetT.toLLVMType())
 			elif sourceT.isUnsignedInteger():

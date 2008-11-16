@@ -39,13 +39,19 @@ for i in [8, 16, 32, 64]:
 del i
 elementaryTypes[u'bool'] = ESType([], ('elementary', 'bool'))
 elementaryTypes[u'void'] = ESType([], ('elementary', 'void'))
-elementaryTypes[u'single'] = ESType([], ('elementary', 'single'))
-elementaryTypes[u'double'] = ESType([], ('elementary', 'double'))
+elementaryTypes[u'float32'] = ESType([], ('elementary', 'float32'))
+elementaryTypes[u'float64'] = ESType([], ('elementary', 'float64'))
 
 
 
 implicitConversions = {}
 def _buildImplicitConversionsTable():
+	# (u)intN -> float32 / float64?
+	# float32 has 23 bits mantissa --> information loss with int32, int64
+	# float64 has 53 bits mantissa --> information loss with int64
+	# but most of the time the result is really used as a floating point number, so it should be ok
+
+
 	# bool to other
 	l = []
 	for x in u'int8 int16 int32 int64'.split():
@@ -54,22 +60,45 @@ def _buildImplicitConversionsTable():
 
 	# int8 to other
 	l = []
-	for x in u'bool int16 int32 int64 single double'.split():
+	for x in u'bool int16 int32 int64 float32 float64'.split():
 		l.append(elementaryTypes[x])
 	implicitConversions[elementaryTypes[u'int8']] = l
 
 	# int16 to other
 	l = []
-	for x in u'bool int32 int64 single double'.split():
+	for x in u'bool int32 int64 float32 float64'.split():
 		l.append(elementaryTypes[x])
 	implicitConversions[elementaryTypes[u'int16']] = l
 
-
 	# int32 to other
 	l = []
-	for x in u'bool int64 double'.split():# add single? that loses some precision but is at least consistent with the rules for int8, int16
+	for x in u'bool int64 float32 float64'.split():
 		l.append(elementaryTypes[x])
 	implicitConversions[elementaryTypes[u'int32']] = l
+
+	# int64 to other
+	l = []
+	for x in u'bool float32 float64'.split():
+		l.append(elementaryTypes[x])
+	implicitConversions[elementaryTypes[u'int64']] = l
+
+	# uint8 to other
+	# uint16 to other
+	# uint32 to other
+	# uint64 to other
+
+	# float32 to other
+	l = []
+	for x in u'bool float64'.split():
+		l.append(elementaryTypes[x])
+	implicitConversions[elementaryTypes[u'float32']] = l
+
+	# float64 to other
+	l = []
+	for x in u'bool'.split():
+		l.append(elementaryTypes[x])
+	implicitConversions[elementaryTypes[u'float64']] = l
+
 
 _buildImplicitConversionsTable()
 

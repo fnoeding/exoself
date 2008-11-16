@@ -410,8 +410,8 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		# fetch some types
 		bool = self._findSymbol(name=u'bool', type_=ESType)
 		int32 = self._findSymbol(name=u'int32', type_=ESType)
-		single = self._findSymbol(name=u'single', type_=ESType)
-		double = self._findSymbol(name=u'double', type_=ESType)
+		float32 = self._findSymbol(name=u'float32', type_=ESType)
+		float64 = self._findSymbol(name=u'float64', type_=ESType)
 
 
 		if op in [tt.AND, tt.XOR, tt.OR]:
@@ -455,16 +455,16 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			if not arg2.esType.isEquivalentTo(int32, False):
 				self._insertImplicitCastNode(arg2, int32)
 
-			if not (arg1.esType.isEquivalentTo(single, False) or arg1.esType.isEquivalentTo(double, False)):
-				self._insertImplicitCastNode(arg1, double)
+			if not (arg1.esType.isEquivalentTo(float32, False) or arg1.esType.isEquivalentTo(float64, False)):
+				self._insertImplicitCastNode(arg1, float64)
 			else:
 				raise NotImplementedError('TODO')
 
 
-			if arg1.esType.isEquivalentTo(single, False):
-				ast.esType = single
-			elif arg1.esType.isEquivalentTo(double, False):
-				ast.esType = double
+			if arg1.esType.isEquivalentTo(float32, False):
+				ast.esType = float32
+			elif arg1.esType.isEquivalentTo(float64, False):
+				ast.esType = float64
 			else:
 				raise NotImplementedError('TODO')
 		elif op in [tt.LESS, tt.LESSEQUAL, tt.EQUAL, tt.NOTEQUAL, tt.GREATEREQUAL, tt.GREATER]:
