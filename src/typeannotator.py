@@ -124,7 +124,6 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 	def _onModuleStart(self, ast, packageName, moduleName, statements):
 		self._moduleNode = ast
-		self._symbolTables = []
 		ast.symbolTable = None
 
 		if packageName:
@@ -139,7 +138,6 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 		if not ast.moduleName:
 			# use filename
-			# TODO error / warn if filename is not a suitable module name
 			ast.moduleName = os.path.split(self._filename)[1]
 			if ast.moduleName.endswith('.es'):
 				ast.moduleName = ast.moduleName[:-3]
@@ -157,7 +155,6 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		# init some important data structures
 		############################################
 		self._initModuleSymbolTable()
-		self._symbolTables = [ast.symbolTable]
 
 
 		############################################
