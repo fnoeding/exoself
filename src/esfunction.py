@@ -57,8 +57,43 @@ class ESFunction(object):
 		self.linkage = linkage
 
 
+	def _mangleNameDefault(self):
+		# header
+		s = ['__ESF_']
+		# package name: length of package name string, then package name
+		s.append('%d%s' % (len(self.package), self.package))
+		# module name: length of module name string, then module name
+		s.append('%d%s' % (len(self.module), self.module))
+
+		# visual separator, length of function name string, then function name and again visual separator
+		s.append('__')
+		s.append('%d%s' % (len(self.name), self.name))
+		s.append('__')
+
+		# function signature
+		s.append(self.esType.mangleName('default'))
+
+		return ''.join(s)
+
+
+	def mangleName(self):
+		if self.name == 'main':
+			return '__ES_main'
+
+
+		if self.mangling == 'default':
+			return self._mangleNameDefault()
+		elif self.mangling== 'C':
+			return self.name
+		else:
+			assert(0 and 'dead code path')
+
+
 	def __str__(self):
 		return '%s (%s, %s): %s; linkage=%s mangling=%s' % (self.name, self.package, self.module, self.esType, self.linkage, self.mangling)
+
+
+	mangledName = property(mangleName)
 
 
 

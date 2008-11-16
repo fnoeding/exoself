@@ -202,7 +202,6 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 				for x in v:
 					assert(isinstance(x, ESFunction))
 					self._addSymbol(name=k, symbol=x)
-					print x
 
 
 
@@ -381,8 +380,6 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			if arg1.esType.isEquivalentTo(arg2.esType, False):
 				ast.esType = arg1.esType
 				return
-
-			print arg1.esType, arg2.esType
 
 			raise NotImplementedError('TODO')
 		elif op in [tt.DOUBLESTAR]:

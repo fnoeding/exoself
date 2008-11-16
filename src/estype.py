@@ -256,3 +256,34 @@ class ESType(object):
 		return self.parents[n:]
 
 
+	def mangleName(self, mode):
+		if mode == 'default':
+			return self._mangleNameDefault()
+		elif mode == 'C':
+			assert(0 and 'should not be called for C mangling')
+		else:
+			assert(0 and 'dead code path')
+
+
+	def _mangleNameDefault(self):
+		if self.payload[0] == 'elementary':
+			return self.payload[1]
+		elif self.payload[0] == 'function':
+			nRets = self.payload[1]
+			
+			rets = [x._mangleNameDefault() for x in self.parents[:nRets]]
+			params = [x._mangleNameDefault() for x in self.parents[nRets:]]
+
+			s = []
+			for x in rets:
+				s.append('R%s' % x)
+
+			for x in params:
+				s.append('P%s' % x)
+
+			return '_'.join(s)
+		else:
+			raise NotImplementedError('TODO')
+
+
+

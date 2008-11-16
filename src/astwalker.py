@@ -256,7 +256,6 @@ class ASTWalker(object):
 			if inlineText:
 				s.append(inlineText)
 			s.append(postText)
-			print s
 			return '\n\t'.join(s) + '\n'
 
 

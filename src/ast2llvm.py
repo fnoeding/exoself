@@ -38,7 +38,6 @@ from llvm.ee import *
 import os.path
 import re
 
-from mangle import *
 from esfunction import ESFunction
 from esvalue import ESValue
 from esvariable import ESVariable
@@ -181,31 +180,19 @@ class ModuleTranslator(astwalker.ASTWalker):
 		esFunction = ast.esFunction
 		esType = esFunction.esType
 
-		# FIXME move mangling to ESFunction, see also _onCallFunc
-		if esFunction.name == 'main':# a user defined main gets called by a compiler defined main function
-			mangledName = '__ES_main'
-		elif esFunction.mangling == 'C':
-			mangledName = esFunction.name
-		elif esFunction.mangling == 'default':
-			mangledName = mangleFunction(esFunction.package, esFunction.module, esFunction.name,
-					'void', # FIXME
-					[]) #FIXME
-		else:
-			assert(0 and 'dead code path')
-
 		try:
 			# make really sure there is no function with this name
-			llvmRef =  self._module.get_function_named(mangledName)
+			llvmRef =  self._module.get_function_named(esFunction.mangledName)
 		except LLVMException:
 			llvmRef = None
 
 		if llvmRef:
 			if not llvmRef.is_declaration:
-				s1 = 'mangled name already in use: %s' % mangledName
+				s1 = 'mangled name already in use: %s' % esFunction.mangledName
 				s2 ='This can be caused by defining a function with the same signature multiple times. If that\'s not the case please submit a bugreport with a testcase.'
 				self._raiseException(CompileError, tree=ast.getChild(1), inlineText=s1, postText=s2)
 		else:
-			llvmRef = self._module.add_function(esType.toLLVMType(), mangledName)
+			llvmRef = self._module.add_function(esType.toLLVMType(), esFunction.mangledName)
 		esFunction.llvmRef = llvmRef # provide access through symbol table
 		ast.llvmRef = llvmRef # provide direct access through ast node
 
@@ -286,6 +273,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 		# this does not work... investigate later
 		#if value == Constant.int(Type.int(1), 0):
 		#	print 'assert is always False in %s:%d' % ('???', ast.line())
+
 
 		# find current function
 		llvmFunc = self._findCurrentFunction().llvmRef
@@ -563,24 +551,14 @@ class ModuleTranslator(astwalker.ASTWalker):
 		esFunction = ast.esFunction
 		llvmFunc = getattr(esFunction, 'llvmRef', None)
 		if not llvmFunc:
-			# FIXME see _onDefFunction: move mangling to ESFunction
-			if esFunction.name == 'main':# a user defined main gets called by a compiler defined main function
-				mangledName = '__ES_main'
-			elif esFunction.mangling == 'C':
-				mangledName = esFunction.name
-			elif esFunction.mangling == 'default':
-				mangledName = mangleFunction(esFunction.package, esFunction.module, esFunction.name,
-					'void', # FIXME
-					[]) #FIXME
-
 			try:
-				llvmFunc = self._module.get_function_named(mangledName)
+				llvmFunc = self._module.get_function_named(esFunction.mangledName)
 			except LLVMException:
 				llvmFunc = None
 
 			if not llvmFunc:
 				# function was not declared, yet...
-				llvmFunc = self._module.add_function(esFunction.esType.toLLVMType(), mangledName)
+				llvmFunc = self._module.add_function(esFunction.esType.toLLVMType(), esFunction.mangledName)
 
 		ast.llvmValue = self._currentBuilder.call(llvmFunc, params, 'ret_%s' % calleeName.text)
 
@@ -612,7 +590,6 @@ class ModuleTranslator(astwalker.ASTWalker):
 		elif op == tt.STAR:
 			ast.llvmValue = self._currentBuilder.mul(arg1.llvmValue, arg2.llvmValue)
 		elif op == tt.SLASH:
-			print arg1.esType, arg2.esType, arg1.llvmValue, arg2.llvmValue
 			if arg1.esType.isEquivalentTo(int32, False):# FIXME should test here for integer signed / integer unsigned / float --> sdiv / udiv / fdiv
 				ast.llvmValue = self._currentBuilder.sdiv(arg1.llvmValue, arg2.llvmValue)
 			else:
