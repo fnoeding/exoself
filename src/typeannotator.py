@@ -42,9 +42,20 @@ import re
 
 
 class ASTTypeAnnotator(astwalker.ASTWalker):
+	_modulesProcessing = [] # list of absolute paths of modules which are currently processed by ASTTypeAnnotator
+
+
 	# TODO add to alle functions a comment which attributes are added
 	def walkAST(self, ast, filename, sourcecode=''):
-		astwalker.ASTWalker.walkAST(self, ast, filename, sourcecode)
+		assert(os.path.isabs(filename))
+
+		ASTTypeAnnotator._modulesProcessing.append(filename)
+
+		try:
+			astwalker.ASTWalker.walkAST(self, ast, filename, sourcecode)
+		finally:
+			ASTTypeAnnotator._modulesProcessing.remove(filename)
+		
 
 
 
@@ -195,11 +206,18 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			toImport = os.path.join(path, *modPath[i:]) + '.es'
 		else:
 			raise NotImplementedError('absolute imports are not supported, yet')
+		toImport = os.path.abspath(toImport)
 
 		if not os.path.exists(toImport):
 			s1 = 'can not find module'
 			s2 = 'file does not exist: %s' % toImport
 			self._raiseException(RecoverableCompileError, tree=moduleName, inlineText=s1, postText=s2)
+
+		# prevent infinite recursion
+		if toImport in ASTTypeAnnotator._modulesProcessing:
+			self._raiseException(CompileError, tree=moduleName, inlineText='module caused infinite recursion. Remove any circular imports to fix this problem')
+		# walkAST adds entry to _modulesProcessing!
+
 
 		# load data
 		f = file(toImport, 'rt')
@@ -214,7 +232,6 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		#     export symbols
 		#     insert symbols in our module
 
-		# FIXME possible infinite recursion: circular dependencies are not detected
 		# FIXME very inefficient:
 		#     ideally first a dependency graph is generated
 		#     this can be used by any make like tool to instruct the compiler to generate (precompiled???) headers
