@@ -52,6 +52,9 @@ def runExoself(filebase, opts, quiet=False, expectCompileError=False):
 	if d.endswith('aborting'):
 		if expectCompileError:
 			return True
+		if not quiet:
+			print d
+			print d2
 		return False
 
 	if expectCompileError:
