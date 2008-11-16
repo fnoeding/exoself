@@ -241,6 +241,27 @@ class ESType(object):
 	def isFunction(self):
 		return self.payload[0] == 'function'
 
+
+	def isSignedInteger(self):
+		if self.payload[0] != 'elementary':
+			return False
+
+		if self.payload[1] not in ['int8', 'int16', 'int32', 'int64']:
+			return False
+
+		return True
+
+
+	def isUnsignedInteger(self):
+		if self.payload[0] != 'elementary':
+			return False
+
+		if self.payload[1] not in ['uint8', 'uint16', 'uint32', 'uint64']:
+			return False
+
+		return True
+
+
 	def getFunctionReturnTypes(self):
 		assert(self.isFunction())
 

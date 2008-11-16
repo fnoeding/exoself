@@ -42,6 +42,7 @@ import re
 
 
 class ASTTypeAnnotator(astwalker.ASTWalker):
+	# TODO add to alle functions a comment which attributes are added
 	def walkAST(self, ast, filename, sourcecode=''):
 		astwalker.ASTWalker.walkAST(self, ast, filename, sourcecode)
 
@@ -54,18 +55,60 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		for k, v in estypesystem.elementaryTypes.items():
 			st.addSymbol(k, v)
 
+
+	def _coerceOperands(self, arg1, arg2):
+		if arg1.esType.isEquivalentTo(arg2.esType, False):
+			return
+
+		if estypesystem.canImplicitlyCast(arg1.esType, arg2.esType):
+			self._insertImplicitCastNode(arg1, arg2.esType)
+		elif estypesystem.canImplicitlyCast(arg2.esType, arg1.esType):
+			self._insertImplicitCastNode(arg2, arg1.esType)
+		else:
+			s1 = 'operands can not be coerced'
+			s2 = 'lhs: %s; rhs: %s' % (arg1.esType, arg2.esType)
+			self._raiseException(RecoverableCompileError, tree=arg1, inlineText=s1, postText=s2)
 	
-	def _insertCastNode(self, exprNode, toTypeName):
+
+	
+	def _insertImplicitCastNode(self, exprNode, to):
+		if isinstance(to, ESType):
+			targetT = to
+			toTypeName = u'%s' % to # TODO a real typename would be better...
+		else:
+			targetT = self._findSymbol(name=to, type_=ESType)
+			toTypeName = to
+
+
+		if not estypesystem.canImplicitlyCast(exprNode.esType, targetT):
+			bad = False
+			if exprNode.type == TreeType.INTEGER_CONSTANT:
+				# an int32 can be cast implicitly to an int8 or even uint8 etc. if it was a constant in the target range
+				if exprNode.signed:
+					if targetT.isEquivalentTo(self._findSymbol(name=u'int8', type_=ESType), False) and exprNode.minBits <= 8:
+						pass
+					elif targetT.isEquivalentTo(self._findSymbol(name=u'int16', type_=ESType), False) and exprNode.minBits <= 16:
+						pass
+					else:
+						bad = True
+				else:
+					raise NotImplementedError('TODO')
+			else:
+				bad = True
+
+			if bad:
+				self._raiseException(RecoverableCompileError, tree=exprNode, inlineText='no implicit cast to %s available' % toTypeName)
+
 		newExprNode = exprNode.copy(True)
 		typeNameNode = exprNode.copy(False)
 
 		typeNameNode.type = TreeType.NAME # FIXME this should be later a typename node
 		typeNameNode.text = toTypeName
 
-		exprNode.type = TreeType.CAST
+		exprNode.type = TreeType.CAST # TODO make this IMPLICITCAST to see the difference?
 		exprNode.text = u'CAST'
 		exprNode.children = [typeNameNode, newExprNode]
-		exprNode.esType = self._findSymbol(name=toTypeName, type_=ESType)
+		exprNode.esType = targetT
 
 
 	def _onModuleStart(self, ast, packageName, moduleName, statements):
@@ -302,15 +345,13 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 				# FIXME provide implicit conversion support 
 				if not t.isEquivalentTo(returnTypes[i], False):
-					# types did not match, try implicit cast
-					if not estypesystem.canImplicitlyCast(t, returnTypes[i]):
-						self._raiseException(RecoverableCompileError, tree=expressions[i], inlineText='incompatible return type')
-
-					self._insertCastNode(expressions[i], u'int32') # FIXME use real type
+					self._insertImplicitCastNode(expressions[i], returnTypes[i])
 
 
 
 	def _onIntegerConstant(self, ast, value):
+		''' added attributes: signed, minBits, bits '''
+
 		signed = True # default, if nothing is specified
 
 		if signed:
@@ -327,9 +368,14 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		else:
 			raise NotImplementedError('uintN not supported, yet')
 
+		ast.signed = signed
+		ast.minBits = bits
+
 		# FIXME enforce a default type
 		if bits < 32:
 			bits = 32
+
+		ast.bits = bits
 
 		if signed:
 			ast.esType = self._findSymbol(name=u'int%d' % bits, type_=ESType)
@@ -354,15 +400,15 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 		if op in [tt.AND, tt.XOR, tt.OR]:
 			if not arg1.esType.isEquivalentTo(bool, False):
-				self._insertCastNode(arg1, u'bool')
+				self._insertImplicitCastNode(arg1, bool)
 
 			if not arg2.esType.isEquivalentTo(bool, False):
-				self._insertCastNode(arg2, u'bool')
+				self._insertImplicitCastNode(arg2, bool)
 
 			ast.esType = bool
 		elif op in [tt.NOT]:
 			if not arg1.esType.isEquivalentTo(bool, False):
-				self._insertCastNode(arg1, u'bool')
+				self._insertImplicitCastNode(arg1, bool)
 
 			ast.esType = bool
 		elif op in [tt.PLUS, tt.MINUS]:
@@ -370,14 +416,14 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 				ast.esType = arg1.esType
 				return
 
-			# FIXME for now only int32 is supported
-			if not arg1.esType.isEquivalentTo(int32, False):
-				self._insertCastNode(arg1, u'int32')
+			if not arg1.esType.isEquivalentTo(arg2.esType, False):
+				# coerce types
+				self._coerceOperands(arg1, arg2)
 
-			if not arg2.esType.isEquivalentTo(int32, False):
-				self._insertCastNode(arg2, u'int32')
+			if not arg1.esType.isSignedInteger():# FIXME
+				self._raiseException(RecoverableCompileError, tree=ast, inlineText='unsupported operands')
 
-			ast.esType = int32
+			ast.esType = arg1.esType
 		elif op in [tt.STAR, tt.SLASH, tt.PERCENT]:
 			if arg1.esType.isEquivalentTo(arg2.esType, False):
 				ast.esType = arg1.esType
@@ -391,10 +437,10 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 			# FIXME for now only powi
 			if not arg2.esType.isEquivalentTo(int32, False):
-				self._insertCastNode(arg2, u'int32')
+				self._insertImplicitCastNode(arg2, int32)
 
 			if not (arg1.esType.isEquivalentTo(single, False) or arg1.esType.isEquivalentTo(double, False)):
-				self._insertCastNode(arg1, u'double')
+				self._insertImplicitCastNode(arg1, double)
 			else:
 				raise NotImplementedError('TODO')
 
@@ -407,11 +453,10 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 				raise NotImplementedError('TODO')
 		elif op in [tt.LESS, tt.LESSEQUAL, tt.EQUAL, tt.NOTEQUAL, tt.GREATEREQUAL, tt.GREATER]:
 			# FIXME for now only int32 supported
-			if not arg1.esType.isEquivalentTo(int32, False):
-				self._insertCastNode(arg1, u'int32')
 
-			if not arg2.esType.isEquivalentTo(int32, False):
-				self._insertCastNode(arg2, u'int32')
+			if not arg1.esType.isEquivalentTo(arg2.esType, False):
+				# coerce types
+				self._coerceOperands(arg1, arg2)
 
 			ast.esType = bool
 		else:
@@ -435,6 +480,12 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		if not callee:
 			self._raiseException(RecoverableCompileError, tree=calleeName, inlineText='no matching function found')
 
+		# convert parameters
+		paramTypes = callee.esType.getFunctionParameterTypes()
+		for i in range(len(expressions)):
+			if not paramTypes[i].isEquivalentTo(expressions[i].esType, False):
+				self._insertImplicitCastNode(expressions[i], paramTypes[i])
+
 
 		returnTypes = callee.esType.getFunctionReturnTypes()
 		assert(len(returnTypes) == 1)
@@ -456,7 +507,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			if not estypesystem.canImplicitlyCast(esType, self._findSymbol(name=u'bool', type_=ESType)):
 				self._raiseException(RecoverableCompileError, tree=expression, inlineText='expression is of incompatible type. expected bool')
 
-			self._insertCastNode(expression, u'bool')
+			self._insertImplicitCastNode(expression, u'bool')
 
 
 	def _onIf(self, ast, expressions, blocks, elseBlock):
@@ -470,7 +521,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 				if not estypesystem.canImplicitlyCast(esType, self._findSymbol(name=u'bool', type_=ESType)):
 					self._raiseException(RecoverableCompileError, tree=expressions[i], inlineText='expression is of incompatible type. expected bool')
 
-				self._insertCastNode(expressions[i], u'bool')
+				self._insertImplicitCastNode(expressions[i], u'bool')
 
 		for x in blocks:
 			self._dispatch(x)
@@ -500,11 +551,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			self._addSymbol(fromTree=varNameNode, symbol=var)
 		else:
 			if not var.esType.isEquivalentTo(esType, False):
-				if not estypesystem.canImplicitlyCast(esType, var.esType):
-					self._raiseException(RecoverableCompileError, tree=exprNode, inlineText='incompatible type')
-
-				# TODO insert CAST node
-				raise NotImplementedError('insert cast node here')
+				self._insertImplicitCastNode(exprNode, var.esType)
 
 
 	

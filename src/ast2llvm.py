@@ -559,7 +559,6 @@ class ModuleTranslator(astwalker.ASTWalker):
 			if not llvmFunc:
 				# function was not declared, yet...
 				llvmFunc = self._module.add_function(esFunction.esType.toLLVMType(), esFunction.mangledName)
-
 		ast.llvmValue = self._currentBuilder.call(llvmFunc, params, 'ret_%s' % calleeName.text)
 
 
@@ -608,18 +607,20 @@ class ModuleTranslator(astwalker.ASTWalker):
 		elif op == tt.XOR:
 			ast.llvmValue = self._currentBuilder.xor(arg1.llvmValue, arg2.llvmValue)
 		elif op in [tt.LESS, tt.LESSEQUAL, tt.EQUAL, tt.NOTEQUAL, tt.GREATEREQUAL, tt.GREATER]:
-			assert(arg1.llvmValue.type.kind == TYPE_INTEGER) # FIXME
 
-			# signed integer code
-			preds = {}
-			preds[tt.LESS] = IPRED_SLT
-			preds[tt.LESSEQUAL] = IPRED_SLE
-			preds[tt.EQUAL] = IPRED_EQ
-			preds[tt.NOTEQUAL] = IPRED_NE
-			preds[tt.GREATEREQUAL] = IPRED_SGE
-			preds[tt.GREATER] = IPRED_SGT
+			if arg1.esType.isSignedInteger() and arg2.esType.isSignedInteger():
+				preds = {}
+				preds[tt.LESS] = IPRED_SLT
+				preds[tt.LESSEQUAL] = IPRED_SLE
+				preds[tt.EQUAL] = IPRED_EQ
+				preds[tt.NOTEQUAL] = IPRED_NE
+				preds[tt.GREATEREQUAL] = IPRED_SGE
+				preds[tt.GREATER] = IPRED_SGT
 
-			ast.llvmValue = self._currentBuilder.icmp(preds[op], arg1.llvmValue, arg2.llvmValue)
+				ast.llvmValue = self._currentBuilder.icmp(preds[op], arg1.llvmValue, arg2.llvmValue)
+			else:
+				raise NotImplementedError('TODO')
+
 		elif op == tt.DOUBLESTAR:
 			if arg2.llvmValue.type.kind == TYPE_INTEGER:
 				# powi
@@ -697,20 +698,35 @@ class ModuleTranslator(astwalker.ASTWalker):
 		bad = False
 
 		if targetT.isEquivalentTo(bool, False):
-			if sourceT.isEquivalentTo(int32, False): # FIXME make this a check for integer
+			if sourceT.isSignedInteger() or sourceT.isUnsignedInteger():
 				ast.llvmValue = self._currentBuilder.icmp(IPRED_NE, expression.llvmValue, Constant.int(expression.llvmValue.type, 0))
 			else:
 				bad = True
-		elif targetT.isEquivalentTo(int32, False):
+		elif targetT.isSignedInteger():
 			if sourceT.isEquivalentTo(bool, False):
 				ast.llvmValue = self._currentBuilder.zext(expression.llvmValue, targetT.toLLVMType())
+			elif sourceT.isSignedInteger():
+				t = targetT.toLLVMType()
+				s = sourceT.toLLVMType()
+
+				tBits = t.width
+				sBits = s.width
+
+				if sBits > tBits:
+					ast.llvmValue = self._currentBuilder.trunc(expression.llvmValue, t)
+				elif sBits < tBits:
+					ast.llvmValue = self._currentBuilder.sext(expression.llvmValue, t)
+				else:
+					assert(0 and 'dead code path; should have been caught by other checks!')
 			elif sourceT.isEquivalentTo(double, False):
 				ast.llvmValue = self._currentBuilder.fptosi(expression.llvmValue, targetT.toLLVMType())
 			else:
 				bad = True
 		elif targetT.isEquivalentTo(double, False): # FIXME make this a check for floating point
-			if sourceT.isEquivalentTo(int32, False): # FIXME make this a check for integer
+			if sourceT.isSignedInteger():
 				ast.llvmValue = self._currentBuilder.sitofp(expression.llvmValue, targetT.toLLVMType())
+			elif sourceT.isUnsignedInteger():
+				ast.llvmValue = self._currentBuilder.uitofp(expression.llvmValue, targetT.toLLVMType())
 			else:
 				bad
 		else:

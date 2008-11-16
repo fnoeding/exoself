@@ -75,6 +75,9 @@ _buildImplicitConversionsTable()
 
 
 def canImplicitlyCast(fromType, toType):
+	assert(isinstance(fromType, ESType))
+	assert(isinstance(toType, ESType))
+
 	if not fromType in implicitConversions:
 		return False
 
