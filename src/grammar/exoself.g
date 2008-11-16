@@ -56,7 +56,7 @@ tokens {
 	LISTASSIGN;
 	FOREXPRESSION;
 	IMPORTALL;
-	CAST;// for now only used inside the compiler
+	IMPLICITCAST;// used inside the compiler, not the lexer / parser
 }
 
 
@@ -83,6 +83,8 @@ OR: 'or';
 XOR: 'xor';
 AND: 'and';
 NOT: 'not';
+CAST: 'cast';
+BITCAST: 'bitcast';
 
 
 // literals
@@ -201,15 +203,18 @@ break_stmt: BREAK^;
 continue_stmt: CONTINUE^;
 
 
-defvar: n=NAME AS t=NAME -> ^(DEFVAR $n $t);
+defvar: NAME AS type_name -> ^(DEFVAR NAME type_name);
 
 deffunc:
 	DEF deffuncmodifiers
 	NAME
-	deffuncargs AS NAME
+	deffuncargs AS type_name
 	(block | SEMI)
-	-> ^(DEFFUNC deffuncmodifiers NAME NAME deffuncargs block?);
-deffuncargs: LPAREN (NAME AS NAME COMMA)* (NAME AS NAME)? RPAREN-> ^(DEFFUNCARGS NAME*);
+	-> ^(DEFFUNC deffuncmodifiers NAME type_name deffuncargs block?);
+deffuncargs: LPAREN (variable_as_type COMMA)* (variable_as_type)? RPAREN-> ^(DEFFUNCARGS variable_as_type*);
+variable_as_type: NAME AS! type_name;
+
+
 deffuncmodifiers: (LPAREN NAME ASSIGN NAME (COMMA NAME ASSIGN NAME)* RPAREN)? -> ^(DEFFUNCMODIFIERS NAME*);
 
 block: LCURLY
@@ -242,7 +247,10 @@ atom: LPAREN expr RPAREN -> expr
 	| integer_constant
 	| float_constant
 	| variable_name
-	| function_call;
+	| function_call
+	| cast_expression;
+
+cast_expression: (CAST^ | BITCAST^) expr AS! type_name;
 
 integer_constant:
 	INTEGER -> ^(INTEGER_CONSTANT INTEGER);
@@ -251,6 +259,8 @@ float_constant:
 	FLOAT -> ^(FLOAT_CONSTANT FLOAT);
 
 variable_name: NAME -> ^(VARIABLE NAME);
+
+type_name: NAME;
 
 function_call: NAME LPAREN (expr (COMMA expr)* COMMA?)? RPAREN -> ^(CALLFUNC NAME expr*);
 
