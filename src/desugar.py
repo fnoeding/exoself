@@ -140,6 +140,9 @@ def _desugarNegativeNumberConstants(tree):
 	if len(tree.children) != 1:
 		return
 
+	if not tree.children[0].type in [TreeType.INTEGER_CONSTANT, TreeType.FLOAT_CONSTANT]:
+		return
+
 	# make a PLUS node out of this node, and move the sign into the constant
 	tree.type = TreeType.PLUS
 	tree.text = u'+'
