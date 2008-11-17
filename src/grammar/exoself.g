@@ -33,7 +33,7 @@ grammar exoself;
 options {
 	output = AST;
 	language = Python;
-	k = 4;
+//	k = 4;
 }
 
 //****************************************************************************
@@ -42,6 +42,58 @@ options {
 
 
 tokens {
+	// keywords
+	PACKAGE = 'package';
+	MODULE = 'module';
+	DEF = 'def';
+	AS = 'as';
+	PASS = 'pass';// in principle not needed, since we are using no significant whitespace. But reserve it for later extension in that direction
+	RETURN = 'return';
+	ASSERT = 'assert';
+	IF = 'if';
+	ELSE = 'else';
+	ELIF = 'elif';
+	FOR = 'for';
+	IN = 'in';
+	RANGE = 'range';
+	BREAK = 'break';
+	CONTINUE = 'continue';
+	WHILE = 'while';
+	IMPORT = 'import';
+	FROM = 'from';
+	OR = 'or';
+	XOR = 'xor';
+	AND = 'and';
+	NOT = 'not';
+	CAST = 'cast';
+	BITCAST = 'bitcast';
+
+	// operators
+	SEMI = ';';
+	PLUS = '+';
+	MINUS = '-';
+	STAR = '*';
+	DOUBLESTAR = '**';
+	PERCENT = '%';
+	SLASH = '/';
+	COLON =	':';
+	LPAREN = '(';
+	RPAREN = ')';
+	LCURLY = '{';
+	RCURLY = '}';
+	LBRACKET = '[';
+	RBRACKET = ']';
+	ASSIGN = '=';
+	COMMA = ',';
+	DOT = '.';
+	LESS = '<';
+	LESSEQUAL = '<=';
+	EQUAL = '==';
+	NOTEQUAL = '!=';
+	GREATEREQUAL = '>=';
+	GREATER = '>';
+
+	// imaginary tokens
 	MODULESTART;
 	DEFFUNC;
 	DEFFUNCARGS;
@@ -62,32 +114,6 @@ tokens {
 	DEREFERENCE;
 }
 
-
-// keywords
-PACKAGE: 'package';
-MODULE: 'module';
-DEF: 'def';
-AS: 'as';
-PASS: 'pass';// in principle not needed, since we are using no significant whitespace. But reserve it for later extension in that direction
-RETURN: 'return';
-ASSERT: 'assert';
-IF: 'if';
-ELSE: 'else';
-ELIF: 'elif';
-FOR: 'for';
-IN: 'in';
-RANGE: 'range';
-BREAK: 'break';
-CONTINUE: 'continue';
-WHILE: 'while';
-IMPORT: 'import';
-FROM: 'from';
-OR: 'or';
-XOR: 'xor';
-AND: 'and';
-NOT: 'not';
-CAST: 'cast';
-BITCAST: 'bitcast';
 
 
 // literals
@@ -124,31 +150,6 @@ NEWLINE: (('\r')? '\n')+ {$channel=HIDDEN};
 WS: (' ' | '\t')+ {$channel=HIDDEN;};
 
 
-
-// operators
-SEMI: ';';
-PLUS: '+';
-MINUS: '-';
-STAR: '*';
-DOUBLESTAR: '**';
-PERCENT: '%';
-SLASH: '/';
-COLON:	':';
-LPAREN: '(';
-RPAREN: ')';
-LCURLY: '{';
-RCURLY: '}';
-LBRACKET: '[';
-RBRACKET: ']';
-ASSIGN: '=';
-COMMA: ',';
-DOT: '.';
-LESS: '<';
-LESSEQUAL: '<=';
-EQUAL: '==';
-NOTEQUAL: '!=';
-GREATEREQUAL: '>=';
-GREATER: '>';
 
 
 //***************************************************************************
