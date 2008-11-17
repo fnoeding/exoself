@@ -610,7 +610,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			self._dispatch(assigneeExpr)
 
 			if not assigneeExpr.esType.isEquivalentTo(esType, False):
-				self._insertImplicitCastNode(exprNode, var.esType)
+				self._insertImplicitCastNode(exprNode, assigneeExpr.esType)
 		else:
 			print assigneeExpr.text
 			raise NotImplementedError('TODO')
@@ -738,6 +738,9 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 	def _onDereference(self, ast):
 		# FIXME move ast handling into ast walker!
+
+		if len(ast.children) == 2:
+			self._dispatch(ast.children[1]) # offset expr
 
 		var = self._findSymbol(fromTree=ast.children[0].children[0], type_=ESVariable)
 		ast.esType = var.esType.dereference()

@@ -577,7 +577,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 			if arg2:
 				ast.llvmValue = self._currentBuilder.sub(arg1.llvmValue, arg2.llvmValue)
 			else:
-				ast.llvmValue = self._currentBuilder.sub(Constant.int(arg1.llvmValue.type, 0), arg1.llvmValue)
+				ast.llvmValue = self._currentBuilder.sub(Constant.null(arg1.llvmValue.type), arg1.llvmValue)
 		elif op == tt.STAR:
 			ast.llvmValue = self._currentBuilder.mul(arg1.llvmValue, arg2.llvmValue)
 		elif op == tt.SLASH:

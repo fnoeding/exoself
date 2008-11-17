@@ -276,9 +276,11 @@ class ASTWalker(object):
 			assert(0 and 'dead code path / support for new token type not implemented')
 
 		self._nodes.append(ast)
+		#print '-->', self._nodes[-1].text, self._nodes[-1].line, self._nodes[-1].charPos
 		try:
 			return callee(**kwargs)
 		finally:
+			#print '<--', self._nodes[-1].text, self._nodes[-1].line, self._nodes[-1].charPos
 			self._nodes.pop()
 
 	def _generateContext(self, preText, postText, inlineText='', lineBase1=0, charBase1=0, numBefore=5, numAfter=0):

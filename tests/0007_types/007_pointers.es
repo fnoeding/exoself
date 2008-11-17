@@ -21,6 +21,13 @@ def main() as int32
 	x = *p;
 	free(p);
 
+	pf as float64*;
+	pf = cast(malloc(8) as float64*);
+	*pf = 42;
+	assert 42 == *pf;
+	free(pf);
+
+
 
 	return x - 42;
 }
