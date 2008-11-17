@@ -589,24 +589,37 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		self._addSymbol(fromTree=variableName, symbol=esVar)
 
 
-	def _onAssignHelper(self, varNameNode, exprNode):
+	def _onAssignHelper(self, assigneeExpr, exprNode):
 		self._dispatch(exprNode)
 		esType = exprNode.esType
 
-		var = self._findSymbol(fromTree=varNameNode, type_=ESVariable, mayFail=True)
 
-		if not var:
-			# create new variable with type of expression
-			var = ESVariable(varNameNode.text, esType)
-			self._addSymbol(fromTree=varNameNode, symbol=var)
-		else:
-			if not var.esType.isEquivalentTo(esType, False):
+		# FIXME make assigneeExpr eval more general and move it to astwalker!
+		if assigneeExpr.type == TreeType.VARIABLE:
+			varNameNode = assigneeExpr.children[0]
+			var = self._findSymbol(fromTree=varNameNode, type_=ESVariable, mayFail=True)
+
+			if not var:
+				# create new variable with type of expression
+				var = ESVariable(varNameNode.text, esType)
+				self._addSymbol(fromTree=varNameNode, symbol=var)
+			else:
+				if not var.esType.isEquivalentTo(esType, False):
+					self._insertImplicitCastNode(exprNode, var.esType)
+		elif assigneeExpr.type == TreeType.DEREFERENCE:
+			self._dispatch(assigneeExpr)
+
+			if not assigneeExpr.esType.isEquivalentTo(esType, False):
 				self._insertImplicitCastNode(exprNode, var.esType)
+		else:
+			print assigneeExpr.text
+			raise NotImplementedError('TODO')
+
 
 
 	
-	def _onAssign(self, ast, variableName, expression):
-		self._onAssignHelper(variableName, expression)
+	def _onAssign(self, ast, assigneeExpr, expression):
+		self._onAssignHelper(assigneeExpr, expression)
 
 
 	def _onListAssign(self, ast, variableNames, expressions):
@@ -721,6 +734,13 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 					baseType = baseType.derivePointer()
 
 			ast.esType = baseType
+
+
+	def _onDereference(self, ast):
+		# FIXME move ast handling into ast walker!
+
+		var = self._findSymbol(fromTree=ast.children[0].children[0], type_=ESVariable)
+		ast.esType = var.esType.dereference()
 
 
 

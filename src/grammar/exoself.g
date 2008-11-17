@@ -33,7 +33,7 @@ grammar exoself;
 options {
 	output = AST;
 	language = Python;
-	k = 3;
+	k = 4;
 }
 
 //****************************************************************************
@@ -59,6 +59,7 @@ tokens {
 	IMPORTALL;
 	IMPLICITCAST;// used inside the compiler, not the lexer / parser
 	TYPENAME;
+	DEREFERENCE;
 }
 
 
@@ -192,19 +193,24 @@ simple_stmt:
 	| continue_stmt) (SEMI!+);
 
 assign_stmt: simple_assign | list_assign | aug_assign;
-simple_assign: (NAME ASSIGN)+ expr -> ^(ASSIGN NAME* expr);
+simple_assign: (simple_assign_expr ASSIGN)+ expr -> ^(ASSIGN simple_assign_expr+ expr);
+simple_assign_expr:
+	(variable_name)
+	| (STAR variable_name -> ^(DEREFERENCE variable_name));// TODO this is only the most simple case...
+
+
 list_assign: list_assign_lhs ASSIGN list_assign_rhs -> ^(LISTASSIGN list_assign_lhs list_assign_rhs);
-list_assign_lhs: NAME (COMMA NAME)+ -> ^(ASSIGNLIST NAME+);
+list_assign_lhs: variable_name (COMMA variable_name)+ -> ^(ASSIGNLIST variable_name+);
 list_assign_rhs: expr (COMMA expr)+ -> ^(ASSIGNLIST expr+);
 aug_assign:
-	NAME (
+	simple_assign_expr (
 		op=PLUS
 		| op=MINUS
 		| op=STAR
 		| op=SLASH
 		| op=DOUBLESTAR
 		| op=PERCENT
-	) ASSIGN expr -> ^(ASSIGN NAME ^($op ^(VARIABLE NAME) expr));
+	) ASSIGN expr -> ^(ASSIGN simple_assign_expr ^($op simple_assign_expr expr));
 
 
 pass_stmt: PASS^;
@@ -251,6 +257,7 @@ term: factor ((STAR^ | SLASH^ | PERCENT^) factor)*;
 factor:
 	PLUS^ factor
 	| MINUS^ factor
+	| STAR power -> ^(DEREFERENCE power) // FIXME move to its own rule; make it more general
 	| power;
 power: function_operator (DOUBLESTAR power -> ^(DOUBLESTAR function_operator power) | /*nothing*/ -> function_operator);
 function_operator:

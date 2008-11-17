@@ -107,6 +107,10 @@ def canImplicitlyCast(fromType, toType):
 	assert(isinstance(fromType, ESType))
 	assert(isinstance(toType, ESType))
 
+	# any pointer can be implicitly cast to void*
+	if fromType.isPointer and toType.isEquivalentTo(elementaryTypes[u'void'].derivePointer(), False):
+		return True
+
 	if not fromType in implicitConversions:
 		return False
 

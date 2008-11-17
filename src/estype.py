@@ -49,6 +49,12 @@ class ESType(object):
 		return ESType([self], ('pointer', None))
 
 
+	def dereference(self):
+		assert(self.isPointer())
+
+		return self.parents[0]
+
+
 	def deriveConst(self):
 		return ESType._simplify(ESType([self], ('const', None)))
 
@@ -242,34 +248,38 @@ class ESType(object):
 		return self.payload[0] == 'function'
 
 
+	def isPointer(self):
+		return self.payload[0] == 'pointer'
+
+
 	def isSignedInteger(self):
 		if self.payload[0] != 'elementary':
 			return False
 
-		if self.payload[1] not in ['int8', 'int16', 'int32', 'int64']:
-			return False
+		if self.payload[1] in ['int8', 'int16', 'int32', 'int64']:
+			return True
 
-		return True
+		return False
 
 
 	def isUnsignedInteger(self):
 		if self.payload[0] != 'elementary':
 			return False
 
-		if self.payload[1] not in ['uint8', 'uint16', 'uint32', 'uint64']:
-			return False
+		if self.payload[1] in ['uint8', 'uint16', 'uint32', 'uint64']:
+			return True
 
-		return True
+		return False
 
 
 	def isFloatingPoint(self):
 		if self.payload[0] != 'elementary':
 			return False
 
-		if self.payload[1] not in ['float32', 'float64']:
-			return False
+		if self.payload[1] in ['float32', 'float64']:
+			return True
 
-		return True
+		return False
 
 
 	def getFunctionReturnTypes(self):

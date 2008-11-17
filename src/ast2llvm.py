@@ -555,7 +555,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 			if not llvmFunc:
 				# function was not declared, yet...
 				llvmFunc = self._module.add_function(esFunction.esType.toLLVMType(), esFunction.mangledName)
-		ast.llvmValue = self._currentBuilder.call(llvmFunc, params, 'ret_%s' % calleeName.text)
+		ast.llvmValue = self._currentBuilder.call(llvmFunc, params)
 
 
 
@@ -651,15 +651,28 @@ class ModuleTranslator(astwalker.ASTWalker):
 			# we MUST NOT pass a value to _createAllocaForVar! That value is not available in the entry BB!
 			var.llvmRef = self._createAllocaForVar(var.name, var.esType.toLLVMType())
 
-
 		self._currentBuilder.store(llvmValue, var.llvmRef)
 
 
-	def _onAssign(self, ast, variableName, expression):
+	def _onAssign(self, ast, assigneeExpr, expression):
 		self._dispatch(expression)
 
-		var = self._findSymbol(fromTree=variableName, type_=ESVariable)
-		self._simpleAssignment(var, expression.llvmValue)
+		# FIXME
+		if assigneeExpr.type == TreeType.VARIABLE:
+			variableName = assigneeExpr.children[0]
+			var = self._findSymbol(fromTree=variableName, type_=ESVariable)
+			self._simpleAssignment(var, expression.llvmValue)
+		elif assigneeExpr.type == TreeType.DEREFERENCE:
+			self._dispatch(assigneeExpr)
+
+			#variableName = assigneeExpr.children[0]
+			#var = self._findSymbol(fremTree=variableName, type_=ESVariable)
+
+			print 'A', expression.llvmValue, '-->', assigneeExpr.llvmValue
+			self._currentBuilder.store(expression.llvmValue, assigneeExpr.llvmRef)
+			print 'B'
+		else:
+			assert(0 and 'FIXME? TODO?')
 
 
 	def _onListAssign(self, ast, variableNames, expressions):
@@ -686,14 +699,16 @@ class ModuleTranslator(astwalker.ASTWalker):
 		# copy temp -> destination
 		# this is a simple assignment
 		for i in range(n):
-			var = self._findSymbol(fromTree=variableNames[i], type_=ESVariable)
-			value = self._currentBuilder.load(temps[i].llvmRef)
-			self._simpleAssignment(var, value)
+			if variableNames[i].type == TreeType.VARIABLE:
+				var = self._findSymbol(fromTree=variableNames[i].children[0], type_=ESVariable)
+				value = self._currentBuilder.load(temps[i].llvmRef)
+				self._simpleAssignment(var, value)
+			else:
+				assert(0 and 'TODO')
 
 
 	def _onCast(self, ast, expression, typeName):
 		self._dispatch(expression)
-
 
 		bool = self._findSymbol(name=u'bool', type_=ESType)
 
@@ -701,6 +716,8 @@ class ModuleTranslator(astwalker.ASTWalker):
 		sourceT = expression.esType
 
 		if targetT.isEquivalentTo(sourceT, True):# may be really the same or only structurally
+			# FIXME TODO is this correct???
+			ast.llvmValue = expression.llvmValue
 			return
 
 
@@ -735,19 +752,48 @@ class ModuleTranslator(astwalker.ASTWalker):
 				ast.llvmValue = self._currentBuilder.fptosi(expression.llvmValue, targetT.toLLVMType())
 			else:
 				bad = True
-		elif targetT.isFloatingPoint:
+		elif targetT.isFloatingPoint():
 			if sourceT.isSignedInteger():
 				ast.llvmValue = self._currentBuilder.sitofp(expression.llvmValue, targetT.toLLVMType())
 			elif sourceT.isUnsignedInteger():
 				ast.llvmValue = self._currentBuilder.uitofp(expression.llvmValue, targetT.toLLVMType())
 			else:
-				bad
+				bad = True
+		elif targetT.isPointer():
+			if sourceT.isPointer():
+				ast.llvmValue = self._currentBuilder.bitcast(expression.llvmValue, targetT.toLLVMType())
+				#ast.llvmValue = expression.llvmValue
+			else:
+				bad = True
 		else:
 			bad = True
 
 
 		if bad:
 			raise NotImplementedError('cast from %s to %s is not yet supported' % (sourceT, targetT))
+
+
+	def _onDereference(self, ast):
+		# FIXME move ast handling into astwalker!
+		var = self._findSymbol(fromTree=ast.children[0].children[0], type_=ESVariable)
+
+
+
+
+		# we have a problem: The derefencing is ambiguous
+		# either we want to load a value from memory --> we need ast.llvmValue
+		# or we want to store a value to memory --> we need ast.llvmRef
+		# when storing data to memory the load is wasteful - but it's result never get's used
+		# so the optimizer will remove it
+		# for now stay stay with the inefficient code...
+
+		# every variable is an alloca --> first get the real memory address
+		realAddr = self._currentBuilder.load(var.llvmRef)
+		ast.llvmRef = realAddr
+
+		# now load data from it
+		ast.llvmValue = self._currentBuilder.load(realAddr)
+
 
 
 

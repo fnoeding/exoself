@@ -236,7 +236,7 @@ class ASTWalker(object):
 			kwargs['typeName'] = ast.children[1]
 		elif t == tt.ASSIGN:
 			callee = self._onAssign
-			kwargs['variableName'] = ast.children[0]
+			kwargs['assigneeExpr'] = ast.children[0]
 			kwargs['expression'] = ast.children[1]
 		elif t == tt.LISTASSIGN:
 			callee = self._onListAssign
@@ -269,6 +269,8 @@ class ASTWalker(object):
 			kwargs['typeName'] = ast.children[1]
 		elif t == tt.TYPENAME:
 			callee = self._onTypeName
+		elif t == tt.DEREFERENCE:
+			callee = self._onDereference
 		else:
 			print t
 			assert(0 and 'dead code path / support for new token type not implemented')

@@ -76,7 +76,7 @@ def _fixPackageAndModuleNames(tree):
 
 def _desugarMultiAssign(tree):
 	# special action! we traverse the tree internally!
-	assert(tree.text != u'=' and 'desugaring of top level assignments is not possible. The assignment node MUST be a child node!')
+	assert(tree.type != TreeType.ASSIGN and 'desugaring of top level assignments is not possible. The assignment node MUST be a child node!')
 
 
 	# transform assignments in the form
@@ -91,7 +91,7 @@ def _desugarMultiAssign(tree):
 	i = 0
 	while i < len(tree.children): # len must be calculated after every loop again!
 		c = tree.children[i]
-		if c.text == u'=' and c.getChildCount() > 2:
+		if c.type == TreeType.ASSIGN and c.getChildCount() > 2:
 			# fix this node
 			
 			# create new nodes
@@ -106,14 +106,12 @@ def _desugarMultiAssign(tree):
 			newAssignNodes.append(node)
 
 			for j in range(nNames - 2, -1, -1):# start with assignment on the right side working towards the left side
-				variableNode = c.copy(False)
-				variableNode.type = TreeType.VARIABLE
-				variableNode.text = u'VARIABLE'
-				variableNode.children = [nameNodes[j + 1].copy(True)]
+				variableNode = nameNodes[j + 1].copy(True)
 
 				node = c.copy(False)
 				node.children = [nameNodes[j].copy(True), variableNode]
 				newAssignNodes.append(node)
+
 
 			# now replace tree.children[i] with newAssignNodes
 			a = tree.children[:i]
