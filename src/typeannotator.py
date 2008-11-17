@@ -414,6 +414,11 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			ast.esType = self._findSymbol(name=u'uint%d' % bits, type_=ESType)
 
 
+	def _onFloatConstant(self, ast, constant):
+		# FIXME
+		ast.esType = self._findSymbol(name=u'float64', type_=ESType)
+
+
 	def _onBasicOperator(self, ast, op, arg1, arg2):
 		tt = TreeType
 
@@ -451,16 +456,19 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 				# coerce types
 				self._coerceOperands(arg1, arg2)
 
-			if not arg1.esType.isSignedInteger():# FIXME
-				self._raiseException(RecoverableCompileError, tree=ast, inlineText='unsupported operands')
+			ast.esType = arg1.esType
+		elif op in [tt.STAR, tt.SLASH]:
+			if not arg1.esType.isEquivalentTo(arg2.esType, False):
+				self._coerceOperands(arg1, arg2)
 
 			ast.esType = arg1.esType
-		elif op in [tt.STAR, tt.SLASH, tt.PERCENT]:
+		elif op in [tt.PERCENT]:
 			if arg1.esType.isEquivalentTo(arg2.esType, False):
 				ast.esType = arg1.esType
 				return
 
 			raise NotImplementedError('TODO')
+
 		elif op in [tt.DOUBLESTAR]:
 			# base: arg1; exponent: arg2
 			# powi: arg1 any float, arg2 int32

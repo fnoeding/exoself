@@ -485,16 +485,11 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 
 
-	def _onFloatConstant(self, tree):
-		assert(tree.text == 'FLOAT_CONSTANT')
-
-		value = tree.getChild(0).text.replace('_', '').lower()
+	def _onFloatConstant(self, ast, constant):
+		# FIXME
+		value = constant.text.replace('_', '').lower()
 		
-		f = float(value)
-
-		constType = Type.float()
-
-		return Constant.real(constType, f) # FIXME use float
+		ast.llvmValue = Constant.real(ast.esType.toLLVMType(), str(value))
 
 
 	def _onVariable(self, ast, variableName):
@@ -572,10 +567,6 @@ class ModuleTranslator(astwalker.ASTWalker):
 		if arg2:
 			self._dispatch(arg2)
 
-		# fetch some types
-		bool = self._findSymbol(name=u'bool', type_=ESType)
-		int32 = self._findSymbol(name=u'int32', type_=ESType)
-
 
 		if op == tt.PLUS:
 			if arg2:
@@ -590,13 +581,21 @@ class ModuleTranslator(astwalker.ASTWalker):
 		elif op == tt.STAR:
 			ast.llvmValue = self._currentBuilder.mul(arg1.llvmValue, arg2.llvmValue)
 		elif op == tt.SLASH:
-			if arg1.esType.isEquivalentTo(int32, False):# FIXME should test here for integer signed / integer unsigned / float --> sdiv / udiv / fdiv
+			if arg1.esType.isSignedInteger():
 				ast.llvmValue = self._currentBuilder.sdiv(arg1.llvmValue, arg2.llvmValue)
+			elif arg1.esType.isUnsignedInteger():
+				ast.llvmValue = self._currentBuilder.udiv(arg1.llvmValue, arg2.llvmValue)
+			elif arg1.esType.isFloatingPoint():
+				ast.llvmValue = self._currentBuilder.fdiv(arg1.llvmValue, arg2.llvmValue)
 			else:
-				raise NotImplementedError('TODO')
+				raise NotImplementedError('FIXME? TODO?')
 		elif op == tt.PERCENT:
-			if arg1.esType.isEquivalentTo(int32, False):# FIXME should test here for integer signed / integer unsigned / float --> sdiv / udiv / fdiv
+			if arg1.esType.isSignedInteger():
 				ast.llvmValue = self._currentBuilder.srem(arg1.llvmValue, arg2.llvmValue)
+			elif arg1.esType.isUnsignedInteger():
+				ast.llvmValue = self._currentBuilder.urem(arg1.llvmValue, arg2.llvmValue)
+			elif arg1.esType.isFloatingPoint():
+				ast.llvmValue = self._currentBuilder.frem(arg1.llvmValue, arg2.llvmValue)
 			else:
 				raise NotImplementedError('TODO')
 		elif op == tt.NOT:
@@ -697,8 +696,6 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 
 		bool = self._findSymbol(name=u'bool', type_=ESType)
-		int32 = self._findSymbol(name=u'int32', type_=ESType)
-		float64 = self._findSymbol(name=u'float64', type_=ESType)
 
 		targetT = ast.esType
 		sourceT = expression.esType
@@ -712,6 +709,10 @@ class ModuleTranslator(astwalker.ASTWalker):
 		if targetT.isEquivalentTo(bool, False):
 			if sourceT.isSignedInteger() or sourceT.isUnsignedInteger():
 				ast.llvmValue = self._currentBuilder.icmp(IPRED_NE, expression.llvmValue, Constant.int(expression.llvmValue.type, 0))
+			elif sourceT.isFloatingPoint():
+				# TODO think about ordered and unordered
+				# for now use ordered
+				ast.llvmValue = self._currentBuilder.fcmp(RPRED_ONE, expression.llvmValue, Constant.real(expression.llvmValue.type, '0'))
 			else:
 				bad = True
 		elif targetT.isSignedInteger():
@@ -730,11 +731,11 @@ class ModuleTranslator(astwalker.ASTWalker):
 					ast.llvmValue = self._currentBuilder.sext(expression.llvmValue, t)
 				else:
 					assert(0 and 'dead code path; should have been caught by other checks!')
-			elif sourceT.isEquivalentTo(float64, False):
+			elif sourceT.isFloatingPoint():
 				ast.llvmValue = self._currentBuilder.fptosi(expression.llvmValue, targetT.toLLVMType())
 			else:
 				bad = True
-		elif targetT.isEquivalentTo(float64, False): # FIXME make this a check for floating point
+		elif targetT.isFloatingPoint:
 			if sourceT.isSignedInteger():
 				ast.llvmValue = self._currentBuilder.sitofp(expression.llvmValue, targetT.toLLVMType())
 			elif sourceT.isUnsignedInteger():
