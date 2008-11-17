@@ -77,10 +77,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 	def _addHelperFunctionsPostTranslation(self):
 		# if this module contains a main function emit code which will call it
 
-		try:
-			flist = self._findSymbol(name=u'main', type_=ESFunction)
-		except CompileError:
-			flist = []
+		flist = self._findSymbol(name=u'main', type_=ESFunction, mayFail=True)
 
 		if flist:
 			assert(len(flist) == 1)

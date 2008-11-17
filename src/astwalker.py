@@ -362,11 +362,19 @@ class ASTWalker(object):
 
 		type_ = kwargs['type_']
 
+		if 'mayFail' in kwargs:
+			mayFail = kwargs['mayFail']
+		else:
+			mayFail = False
+
 
 		s = self._findSymbolHelper(name)
 
 		if not s:
-			self._raiseException(RecoverableCompileError, tree=fromTree, inlineText='could not find symbol')
+			if mayFail:
+				return None
+			else:
+				self._raiseException(RecoverableCompileError, tree=fromTree, inlineText='could not find symbol')
 		if type_:
 			bad = False
 			if type_ == ESFunction:

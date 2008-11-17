@@ -571,10 +571,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		self._dispatch(exprNode)
 		esType = exprNode.esType
 
-		try:
-			var = self._findSymbol(fromTree=varNameNode, type_=ESVariable)
-		except CompileError:
-			var = None
+		var = self._findSymbol(fromTree=varNameNode, type_=ESVariable, mayFail=True)
 
 		if not var:
 			# create new variable with type of expression
@@ -625,10 +622,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		if badNode:
 			self._raiseException(RecoverableCompileError, tree=badNode, inlineText='range expressions are currently only implemented for int32')
 
-		try:
-			var = self._findSymbol(fromTree=variableName, type_=ESVariable)
-		except CompileError:
-			var = None
+		var = self._findSymbol(fromTree=variableName, type_=ESVariable, mayFail=True)
 
 		if var:
 			if not var.esType.isEquivalentTo(int32, False):
