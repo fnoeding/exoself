@@ -197,7 +197,8 @@ assign_stmt: simple_assign | list_assign | aug_assign;
 simple_assign: (simple_assign_expr ASSIGN)+ expr -> ^(ASSIGN simple_assign_expr+ expr);
 simple_assign_expr:
 	(variable_name)
-	| (STAR variable_name -> ^(DEREFERENCE variable_name));// TODO this is only the most simple case...
+	| (STAR variable_name -> ^(DEREFERENCE variable_name))// TODO this is only the most simple case...
+	| (variable_name LBRACKET (variable_name | integer_constant) RBRACKET -> ^(DEREFERENCE variable_name variable_name? integer_constant?));
 
 
 list_assign: list_assign_lhs ASSIGN list_assign_rhs -> ^(LISTASSIGN list_assign_lhs list_assign_rhs);
@@ -260,7 +261,10 @@ factor:
 	| MINUS^ factor
 	| STAR power -> ^(DEREFERENCE power) // FIXME move to its own rule; make it more general
 	| power;
-power: function_operator (DOUBLESTAR power -> ^(DOUBLESTAR function_operator power) | /*nothing*/ -> function_operator);
+power: array_subscript (DOUBLESTAR power -> ^(DOUBLESTAR array_subscript power) | /*nothing*/ -> array_subscript);
+
+array_subscript: function_operator (LBRACKET expr RBRACKET -> ^(DEREFERENCE function_operator expr) | /*nothing*/ -> function_operator);// FIXME make more generic!
+
 function_operator:
 	(a=atom->$a) (NAME b=atom -> ^(CALLFUNC NAME $a $b))*;
 

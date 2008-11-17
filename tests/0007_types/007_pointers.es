@@ -17,6 +17,7 @@ def main() as int32
 	p = cast(malloc(4) as int32*);
 	x = *p;
 	*p = 42;
+	assert *p == 42;
 	x = *p;
 	free(p);
 

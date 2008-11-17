@@ -778,8 +778,6 @@ class ModuleTranslator(astwalker.ASTWalker):
 		var = self._findSymbol(fromTree=ast.children[0].children[0], type_=ESVariable)
 
 
-
-
 		# we have a problem: The derefencing is ambiguous
 		# either we want to load a value from memory --> we need ast.llvmValue
 		# or we want to store a value to memory --> we need ast.llvmRef
@@ -787,12 +785,21 @@ class ModuleTranslator(astwalker.ASTWalker):
 		# so the optimizer will remove it
 		# for now stay stay with the inefficient code...
 
+		if len(ast.children) == 1:
+			idx = [Constant.int(Type.int(32), 0)]
+		else:
+			self._dispatch(ast.children[1])
+			idx = [ast.children[1].llvmValue]
+
+
 		# every variable is an alloca --> first get the real memory address
 		realAddr = self._currentBuilder.load(var.llvmRef)
-		ast.llvmRef = realAddr
+
+		realAddrWithOffset = self._currentBuilder.gep(realAddr, idx)
+		ast.llvmRef = realAddrWithOffset
 
 		# now load data from it
-		ast.llvmValue = self._currentBuilder.load(realAddr)
+		ast.llvmValue = self._currentBuilder.load(realAddrWithOffset)
 
 
 
