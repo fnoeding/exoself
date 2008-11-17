@@ -33,6 +33,7 @@ grammar exoself;
 options {
 	output = AST;
 	language = Python;
+	k = 3;
 }
 
 //****************************************************************************
@@ -57,6 +58,7 @@ tokens {
 	FOREXPRESSION;
 	IMPORTALL;
 	IMPLICITCAST;// used inside the compiler, not the lexer / parser
+	TYPENAME;
 }
 
 
@@ -208,10 +210,12 @@ defvar: NAME AS type_name -> ^(DEFVAR NAME type_name);
 deffunc:
 	DEF deffuncmodifiers
 	NAME
-	deffuncargs AS type_name
+	LPAREN deffuncargs RPAREN AS type_name
 	(block | SEMI)
 	-> ^(DEFFUNC deffuncmodifiers NAME type_name deffuncargs block?);
-deffuncargs: LPAREN (variable_as_type COMMA)* (variable_as_type)? RPAREN-> ^(DEFFUNCARGS variable_as_type*);
+deffuncargs:
+	/* nothing */ -> ^(DEFFUNCARGS)
+	| variable_as_type (COMMA variable_as_type)* -> ^(DEFFUNCARGS variable_as_type*);
 variable_as_type: NAME AS! type_name;
 
 
@@ -263,5 +267,11 @@ variable_name: NAME -> ^(VARIABLE NAME);
 type_name: NAME;
 
 function_call: NAME LPAREN (expr (COMMA expr)* COMMA?)? RPAREN -> ^(CALLFUNC NAME expr*);
+
+
+
+
+
+
 
 
