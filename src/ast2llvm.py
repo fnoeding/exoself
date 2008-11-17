@@ -668,9 +668,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 			#variableName = assigneeExpr.children[0]
 			#var = self._findSymbol(fremTree=variableName, type_=ESVariable)
 
-			print 'A', expression.llvmValue, '-->', assigneeExpr.llvmValue
 			self._currentBuilder.store(expression.llvmValue, assigneeExpr.llvmRef)
-			print 'B'
 		else:
 			assert(0 and 'FIXME? TODO?')
 
