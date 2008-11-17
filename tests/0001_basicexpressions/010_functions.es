@@ -13,6 +13,9 @@ def g() as int32
 
 def main() as int32
 {
+	f();
+	g();
+
 	return f();
 }
 
