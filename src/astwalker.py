@@ -88,6 +88,15 @@ class ASTWalker(object):
 			callee = self._onDefFunction
 
 			n = len(ast.children)
+			assert(ast.children[0].type == tt.DEFFUNCMODIFIERS) # function modifiers
+			assert(ast.children[1].type == tt.NAME) # function name
+			assert(ast.children[2].type == tt.TYPENAME) # return type
+			assert(ast.children[3].type == tt.DEFFUNCARGS) # argument list
+			if n > 4:
+				assert(ast.children[4].type == tt.BLOCK) # optional block argument
+			assert(n <= 5)
+
+			# modifiers
 			modifierKeys = []
 			modifierValues = []
 			for i in range(len(ast.children[0].children) // 2):
@@ -96,17 +105,23 @@ class ASTWalker(object):
 			kwargs['modifierKeys'] = modifierKeys
 			kwargs['modifierValues'] = modifierValues
 
+			# function name
 			kwargs['name'] = ast.children[1]
+
+			# return type
 			kwargs['returnTypeName'] = ast.children[2]
 
+			# argument list
 			parameterNames = []
 			parameterTypeNames = []
-			for i in range(len(ast.children[3].children) // 2):
-				parameterNames.append(ast.children[3].children[2 * i])
-				parameterTypeNames.append(ast.children[3].children[2 * i + 1])
+			argListNode = ast.children[3]
+			for i in range(len(argListNode.children) // 2):
+				parameterNames.append(argListNode.children[2 * i])
+				parameterTypeNames.append(argListNode.children[2 * i + 1])
 			kwargs['parameterNames'] = parameterNames
 			kwargs['parameterTypeNames'] = parameterTypeNames
 
+			# block, if available
 			if n == 4:
 				block = None
 			elif n == 5:
@@ -252,7 +267,10 @@ class ASTWalker(object):
 			callee = self._onCast
 			kwargs['expression'] = ast.children[0]
 			kwargs['typeName'] = ast.children[1]
+		elif t == tt.TYPENAME:
+			callee = self._onTypeName
 		else:
+			print t
 			assert(0 and 'dead code path / support for new token type not implemented')
 
 		self._nodes.append(ast)

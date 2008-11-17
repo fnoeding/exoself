@@ -267,15 +267,16 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 	def _onFuncPrototype(self, ast, modifierKeys, modifierValues, name, returnTypeName, parameterNames, parameterTypeNames, block):
 		# create type of function
-		returnTypes = [self._findSymbol(fromTree=returnTypeName, type_=ESType)]
+		self._dispatch(returnTypeName)
+		returnTypes = [returnTypeName.esType]
 
 		paramNames = []
 		paramTypes = []
 		for i in range(len(parameterTypeNames)):
 			paramNames.append(parameterNames[i].text)
-			type_ = self._findSymbol(fromTree=parameterTypeNames[i], type_=ESType)
 
-			paramTypes.append(type_)
+			self._dispatch(parameterTypeNames[i])
+			paramTypes.append(parameterTypeNames[i].esType)
 
 		functionType = ESType.createFunction(returnTypes, paramTypes)
 
@@ -469,10 +470,8 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			if not arg2.esType.isEquivalentTo(int32, False):
 				self._insertImplicitCastNode(arg2, int32)
 
-			if not (arg1.esType.isEquivalentTo(float32, False) or arg1.esType.isEquivalentTo(float64, False)):
+			if not arg1.esType.isFloatingPoint():
 				self._insertImplicitCastNode(arg1, float64)
-			else:
-				raise NotImplementedError('TODO')
 
 
 			if arg1.esType.isEquivalentTo(float32, False):
@@ -561,7 +560,9 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 
 	def _onDefVariable(self, ast, variableName, typeName):
-		esType = self._findSymbol(fromTree=typeName, type_=ESType)
+		self._dispatch(typeName)
+
+		esType = typeName.esType
 		esVar = ESVariable(variableName.text, esType)
 		self._addSymbol(fromTree=variableName, symbol=esVar)
 
@@ -681,7 +682,27 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 		# TODO make sure there exists a conversion operator
 
-		ast.esType = self._findSymbol(fromTree=typeName, type_=ESType)
+		self._dispatch(typeName)
+		ast.esType = typeName.esType
+
+	
+	def _onTypeName(self, ast):
+		n = len(ast.children)
+		if n == 1:
+			ast.esType = self._findSymbol(fromTree=ast.children[0], type_=ESType)
+		else:
+			# later we could implement here const / invariant etc.
+			# but now just look up name
+			baseType = self._findSymbol(fromTree=ast.children[0], type_=ESType)
+
+			# no nesting allowed for now!
+			if ast.children[1].type not in [TreeType.STAR, TreeType.DOUBLESTAR]:
+				self._raiseException(RecoverableCompileError, tree=ast.children[1], inlineText='type constructors are not supported')
+
+			for x in ast.children[1:]:
+				baseType = baseType.derivePointer()
+
+			ast.esType = baseType
 
 
 

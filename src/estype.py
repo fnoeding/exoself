@@ -262,6 +262,16 @@ class ESType(object):
 		return True
 
 
+	def isFloatingPoint(self):
+		if self.payload[0] != 'elementary':
+			return False
+
+		if self.payload[1] not in ['float32', 'float64']:
+			return False
+
+		return True
+
+
 	def getFunctionReturnTypes(self):
 		assert(self.isFunction())
 

@@ -512,6 +512,10 @@ class ModuleTranslator(astwalker.ASTWalker):
 		# FIXME
 		if llvmType.kind == TYPE_INTEGER:
 			defaultValue = Constant.int(llvmType, 0)
+		elif llvmType.kind in [TYPE_FLOAT, TYPE_DOUBLE]:
+			defaultValue = Constant.real(llvmType, 0)
+		elif llvmType.kind == TYPE_POINTER:
+			defaultValue = Constant.null(llvmType)
 		else:
 			assert(0 and 'unsupported variable type')
 
@@ -618,6 +622,17 @@ class ModuleTranslator(astwalker.ASTWalker):
 				preds[tt.GREATER] = IPRED_SGT
 
 				ast.llvmValue = self._currentBuilder.icmp(preds[op], arg1.llvmValue, arg2.llvmValue)
+			elif arg1.esType.isFloatingPoint() and arg2.esType.isFloatingPoint():
+				# TODO think about ordered and unordered comparisions...
+				# for now ordered
+				preds = {}
+				preds[tt.LESS] = RPRED_OLT
+				preds[tt.LESSEQUAL] = RPRED_OLE
+				preds[tt.EQUAL] = RPRED_OEQ
+				preds[tt.NOTEQUAL] = RPRED_ONE
+				preds[tt.GREATEREQUAL] = RPRED_OGE
+				preds[tt.GREATER] = RPRED_OGT
+				ast.llvmValue = self._currentBuilder.fcmp(preds[op], arg1.llvmValue, arg2.llvmValue)
 			else:
 				raise NotImplementedError('TODO')
 

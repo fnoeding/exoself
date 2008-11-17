@@ -180,7 +180,16 @@ for_expression: RANGE^ LPAREN! expr (COMMA! expr (COMMA! expr)?)? RPAREN!;
 while_stmt: WHILE^ expr block (ELSE! block)?;
 
 
-simple_stmt: (pass_stmt | return_stmt | expr | defvar | assign_stmt | assert_stmt | break_stmt | continue_stmt) (SEMI!+);
+simple_stmt:
+	(pass_stmt
+	| return_stmt
+	| expr // this makes the grammar LL(3); is that really necessary?
+//	| function_call // when expr gets removed, uncomment this line
+	| defvar
+	| assign_stmt
+	| assert_stmt
+	| break_stmt
+	| continue_stmt) (SEMI!+);
 
 assign_stmt: simple_assign | list_assign | aug_assign;
 simple_assign: (NAME ASSIGN)+ expr -> ^(ASSIGN NAME* expr);
@@ -254,7 +263,7 @@ atom: LPAREN expr RPAREN -> expr
 	| function_call
 	| cast_expression;
 
-cast_expression: (CAST^ | BITCAST^) expr AS! type_name;
+cast_expression: (CAST^ | BITCAST^) LPAREN! expr AS! type_name RPAREN!;
 
 integer_constant:
 	INTEGER -> ^(INTEGER_CONSTANT INTEGER);
@@ -264,7 +273,7 @@ float_constant:
 
 variable_name: NAME -> ^(VARIABLE NAME);
 
-type_name: NAME;
+type_name: NAME (LPAREN type_name RPAREN)? (STAR | DOUBLESTAR)* -> ^(TYPENAME NAME type_name? STAR* DOUBLESTAR*);
 
 function_call: NAME LPAREN (expr (COMMA expr)* COMMA?)? RPAREN -> ^(CALLFUNC NAME expr*);
 
