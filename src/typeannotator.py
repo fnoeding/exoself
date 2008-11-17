@@ -43,6 +43,12 @@ import re
 
 class ASTTypeAnnotator(astwalker.ASTWalker):
 	_modulesProcessing = [] # list of absolute paths of modules which are currently processed by ASTTypeAnnotator
+	# TODO add a list / dict of processed modules with their dependencies
+
+	def __init__(self, searchPaths):
+		astwalker.ASTWalker.__init__(self)
+
+		self._searchPaths = searchPaths
 
 
 	# TODO add to alle functions a comment which attributes are added
@@ -202,10 +208,18 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 				path, ignored = os.path.split(path)
 			toImport = os.path.join(path, *modPath[i:]) + '.es'
 		else:
-			raise NotImplementedError('absolute imports are not supported, yet')
+			# TODO implement support for importing 'directories' --> if target path is a directory import the file named '__init.es' or something like that instead
+			toImport = ''
+			for sp in self._searchPaths:
+				p = os.path.join(sp, *modPath.split('.')) + '.es'
+				if os.path.exists(p):
+					if os.path.isfile(p):
+						toImport = p
+						break
+
 		toImport = os.path.abspath(toImport)
 
-		if not os.path.exists(toImport):
+		if not (os.path.exists(toImport) and os.path.isfile(toImport)):
 			s1 = 'can not find module'
 			s2 = 'file does not exist: %s' % toImport
 			self._raiseException(RecoverableCompileError, tree=moduleName, inlineText=s1, postText=s2)
@@ -240,7 +254,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		if numErrors:
 			self._raiseException(CompileError, tree=moduleName, inlineText='module contains errors')
 
-		mt = ASTTypeAnnotator()
+		mt = ASTTypeAnnotator(searchPaths=self._searchPaths)
 		mt.walkAST(ast, toImport, toImportData)
 
 
@@ -703,6 +717,8 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 			for x in ast.children[1:]:
 				baseType = baseType.derivePointer()
+				if x.type == TreeType.DOUBLESTAR:
+					baseType = baseType.derivePointer()
 
 			ast.esType = baseType
 

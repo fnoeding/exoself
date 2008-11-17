@@ -1,7 +1,7 @@
 LLI=lli
 LLVM_LINK=llvm-link
 EXOSELF=../../src/exoself
-EXOSELF_OPTS=--save-temps
+EXOSELF_OPTS=-I .
 
 
 
@@ -12,17 +12,17 @@ objects = $(addsuffix .bc, $(files))
 .PHONY: run
 
 run: t$(testnum).bc
-	@$(LLI) t$(testnum).bc
+	$(LLI) t$(testnum).bc
 
 
 t$(testnum).bc: $(objects)
-	@$(LLVM_LINK) -f -o t$(testnum).bc $(objects)
+	$(LLVM_LINK) -f -o t$(testnum).bc $(objects)
 
 
 $(objects): $(sources)
 
 %.bc: %.es
-	@$(EXOSELF) $(EXOSELF_OPTS) $<
+	$(EXOSELF) $(EXOSELF_OPTS) -o $@ $<
 
 
 clean:

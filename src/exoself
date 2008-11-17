@@ -74,6 +74,7 @@ def optimizeModule(module, passes, targetData=''):
 def main():
 	op = OptionParser()
 	op.set_usage('Usage: %prog [options] input.es [input2.es [...]]')
+	op.add_option('-o', help='output filename (only affects bitcode filename)', dest='outputFilename', default=None)
 	op.add_option('-c', help='compile only, do not link', dest='compileOnly', action='store_true')
 	op.add_option('-A', help='generate ast only', dest='astOnly', action='store_true')
 	op.add_option('-S', help='assemble only', dest='asmOnly', action='store_true')
@@ -81,6 +82,10 @@ def main():
 	op.add_option('--save-temps', help='save temporary files in current directory', dest='saveTemps', action='store_true')
 	op.add_option('--ast2dot', help='save AST as a DOT file for graphviz', dest='ast2dot', action='store_true')
 	op.add_option('--ast2png', help='save AST as a png file (needs graphviz / dot)', dest='ast2png', action='store_true')
+
+	op.add_option('--profile', help='profile the compiler', dest='profile', action='store_true') # this is evaluated even before entering main!
+
+	op.add_option('-I', help='module search path; may be specified several times', dest='searchPaths', action='append', default=[])
 
 
 	optUsage = []
@@ -92,20 +97,24 @@ def main():
 
 	op.add_option_group(optOG)
 
-	
+
 
 
 	options, args = op.parse_args()
 
 	if len(args) != 1:
 		op.error('only exactly 1 file at a time supported right now')
-	
+
 	if options.optLevel not in optPasses:
 		op.error('optimization level not supported')
 
 	# make filenames absolute
 	for i in range(len(args)):
 		args[i] = os.path.abspath(args[i])
+	for i in range(len(options.searchPaths)):
+		options.searchPaths[i] = os.path.abspath(options.searchPaths[i])
+	if options.outputFilename:
+		options.outputFilename = os.path.abspath(options.outputFilename)
 
 
 	fn = args[0]
@@ -114,8 +123,13 @@ def main():
 		baseFN = fn[0:fn.rfind('.')]
 	else:
 		baseFN = fn
+	baseFN = os.path.abspath(baseFN)
 	fn = os.path.join(path, fn)
 	source = file(fn).read()
+
+	# output filename
+	if not options.outputFilename:
+		options.outputFilename = baseFN + '.bc'
 
 	# build AST
 	numErrors, ast = sourcecode2AST(source)
@@ -143,7 +157,7 @@ def main():
 
 
 	# annotate ast
-	ta = ASTTypeAnnotator()
+	ta = ASTTypeAnnotator(searchPaths=options.searchPaths)
 	try:
 		ta.walkAST(ast, fn, source)
 	except CompileError, e:
@@ -179,7 +193,7 @@ def main():
 		return 0
 
 	# compile llvm IR to bytecode
-	f = file('%s.bc' % baseFN, 'wb')
+	f = file('%s' % options.outputFilename, 'wb')
 	module.to_bitcode(f)
 	f.close()
 	if options.compileOnly:
@@ -189,5 +203,16 @@ def main():
 
 
 if __name__ == '__main__':
-	sys.exit(main())
+	if '--profile' in sys.argv:
+		import cProfile as profile
+		import pstats
+
+		profile.run('main()', 'exoself.profile.tmp')
+		stats = pstats.Stats('exoself.profile.tmp')
+
+		if os.path.exists('exoself.profile'):
+			stats.add('exoself.profile')
+		stats.dump_stats('exoself.profile')
+	else:
+		sys.exit(main())
 
