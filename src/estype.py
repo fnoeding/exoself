@@ -320,9 +320,13 @@ class ESType(object):
 				s.append('R%s' % x)
 
 			for x in params:
-				s.append('P%s' % x)
+				s.append('A%s' % x)
 
 			return '_'.join(s)
+		elif self.payload[0] == 'pointer':
+			s = self.parents[0]._mangleNameDefault()
+
+			return 'P' + s
 		else:
 			raise NotImplementedError('TODO')
 
