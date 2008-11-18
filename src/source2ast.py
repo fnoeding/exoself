@@ -95,7 +95,7 @@ def AST2DOT(ast):
 			yield i
 			i += 1
 
-	r = ['graph G\n{']
+	r = ['digraph G\n{']
 	def walk(t, idGen):
 		selfI = idGen.next()
 		r.append('n%d [label="%s"];' % (selfI, t.text))
@@ -104,7 +104,7 @@ def AST2DOT(ast):
 		for x in range(n):
 			c = t.getChild(x)
 			ci = walk(c, idGen)
-			r.append('n%d -- n%d' % (selfI, ci))
+			r.append('n%d -> n%d' % (selfI, ci))
 		return selfI
 	walk(ast, idGen())
 	r.append('}')
