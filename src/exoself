@@ -46,6 +46,11 @@ import llvm.core
 import llvm.ee
 import llvm.passes
 
+try:
+	import cPickle as pickle
+except ImportError:
+	import pickle
+
 
 optPasses = {}
 optPasses[0] = ('no optimizations', []) # level 0 must stay at no optimizations! otherwise change code below...
@@ -138,8 +143,8 @@ def main():
 		return 1
 
 	if options.saveTemps or options.astOnly:
-		f = file('%s.ast' % baseFN, 'wt')
-		f.write(AST2StringAST(ast))
+		f = file('%s.ast' % baseFN, 'w')
+		pickle.dump(ast, f)
 		f.close()
 
 	if options.ast2dot:
@@ -164,6 +169,11 @@ def main():
 		print e.message.rstrip()
 		print 'aborting'
 		return 1
+
+	if options.saveTemps:
+		f = file('%s.aast' % baseFN, 'w')
+		pickle.dump(ast, f)
+		f.close()
 
 
 	# build llvm IR
