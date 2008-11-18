@@ -800,6 +800,14 @@ class ModuleTranslator(astwalker.ASTWalker):
 		ast.llvmValue = self._currentBuilder.load(realAddrWithOffset)
 
 
+	def _onAlias(self, ast, name, typeName):
+		pass
+
+
+	def _onTypedef(self, ast, name, typeName):
+		pass
+
+
 
 
 

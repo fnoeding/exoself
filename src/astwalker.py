@@ -271,6 +271,14 @@ class ASTWalker(object):
 			callee = self._onTypeName
 		elif t == tt.DEREFERENCE:
 			callee = self._onDereference
+		elif t == tt.ALIAS:
+			callee = self._onAlias
+			kwargs['name'] = ast.children[0]
+			kwargs['typeName'] = ast.children[1]
+		elif t == tt.TYPEDEF:
+			callee = self._onTypedef
+			kwargs['name'] = ast.children[0]
+			kwargs['typeName'] = ast.children[1]
 		else:
 			print t
 			assert(0 and 'dead code path / support for new token type not implemented')

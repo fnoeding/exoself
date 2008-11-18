@@ -67,6 +67,8 @@ tokens {
 	NOT = 'not';
 	CAST = 'cast';
 	BITCAST = 'bitcast';
+	ALIAS = 'alias';
+	TYPEDEF = 'typedef';
 
 	// operators
 	SEMI = ';';
@@ -165,7 +167,7 @@ package_name: NAME (DOT NAME)*;
 module_stmt: MODULE^ NAME;
 
 
-global_stmt: deffunc | import_stmt;
+global_stmt: deffunc | import_stmt | typedef_stmt | alias_stmt;
 
 import_stmt:
 	FROM module_name IMPORT STAR -> ^(IMPORTALL module_name);
@@ -191,7 +193,9 @@ simple_stmt:
 	| assign_stmt
 	| assert_stmt
 	| break_stmt
-	| continue_stmt) (SEMI!+);
+	| continue_stmt
+	| typedef_stmt
+	| alias_stmt) (SEMI!+);
 
 assign_stmt: simple_assign | list_assign | aug_assign;
 simple_assign: (simple_assign_expr ASSIGN)+ expr -> ^(ASSIGN simple_assign_expr+ expr);
@@ -220,6 +224,8 @@ return_stmt: RETURN^ expr?;
 assert_stmt: ASSERT^ expr;
 break_stmt: BREAK^;
 continue_stmt: CONTINUE^;
+typedef_stmt: TYPEDEF^ NAME AS! type_name;
+alias_stmt: ALIAS^ NAME AS! type_name;
 
 
 defvar: NAME AS type_name -> ^(DEFVAR NAME type_name);

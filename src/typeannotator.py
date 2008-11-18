@@ -747,6 +747,22 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		ast.esType = var.esType.dereference()
 
 
+	def _onAlias(self, ast, name, typeName):
+		self._dispatch(typeName)
+
+		esType = typeName.esType
+
+		self._addSymbol(fromTree=name, symbol=esType)
+
+
+	def _onTypedef(self, ast, name, typeName):
+		self._dispatch(typeName)
+
+		esType = typeName.esType.deriveTypedef(name.text)
+
+		self._addSymbol(fromTree=name, symbol=esType)
+
+
 
 
 
