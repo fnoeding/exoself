@@ -312,6 +312,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 		esFunction = ESFunction(name.text, self._moduleNode.packageName, self._moduleNode.moduleName, functionType, paramNames, mangling=mangling, linkage=linkage)
 		ast.esFunction = esFunction
+		ast.esType = functionType
 
 		# TODO check for duplicate entries
 		self._addSymbol(fromTree=name, symbol=esFunction)
