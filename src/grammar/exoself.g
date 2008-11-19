@@ -33,7 +33,7 @@ grammar exoself;
 options {
 	output = AST;
 	language = Python;
-//	k = 4;
+	k = 2;
 }
 
 //****************************************************************************
@@ -184,39 +184,35 @@ for_expression: RANGE^ LPAREN! expr (COMMA! expr (COMMA! expr)?)? RPAREN!;
 while_stmt: WHILE^ expr block (ELSE! block)?;
 
 
+
 simple_stmt:
 	(pass_stmt
 	| return_stmt
-	| expr // this makes the grammar LL(3); is that really necessary?
-//	| function_call // when expr gets removed, uncomment this line
 	| defvar
-	| assign_stmt
 	| assert_stmt
 	| break_stmt
 	| continue_stmt
 	| typedef_stmt
-	| alias_stmt) (SEMI!+);
+	| alias_stmt
+	| expr_stmt
+	| list_assign
+	) (SEMI!+);
 
-assign_stmt: simple_assign | list_assign | aug_assign;
-simple_assign: (simple_assign_expr ASSIGN)+ expr -> ^(ASSIGN simple_assign_expr+ expr);
-simple_assign_expr:
-	(variable_name)
-	| (STAR variable_name -> ^(DEREFERENCE variable_name))// TODO this is only the most simple case...
-	| (variable_name LBRACKET (variable_name | integer_constant) RBRACKET -> ^(DEREFERENCE variable_name variable_name? integer_constant?));
+
+// FIXME ugly...
+// find a way to pass parameters around, then move things to separate rules
+expr_stmt:
+	a=expr
+	(
+		/* nothing */ -> $a
+		| ((ASSIGN expr)+ -> ^(ASSIGN $a expr+)) // multi_assign
+		| ((op=PLUS | op=MINUS | op=STAR | op=SLASH | op=DOUBLESTAR | op=PERCENT) ASSIGN b=expr -> ^(ASSIGN $a ^($op $a $b))) // aug_assign
+	);
 
 
 list_assign: list_assign_lhs ASSIGN list_assign_rhs -> ^(LISTASSIGN list_assign_lhs list_assign_rhs);
 list_assign_lhs: variable_name (COMMA variable_name)+ -> ^(ASSIGNLIST variable_name+);
 list_assign_rhs: expr (COMMA expr)+ -> ^(ASSIGNLIST expr+);
-aug_assign:
-	simple_assign_expr (
-		op=PLUS
-		| op=MINUS
-		| op=STAR
-		| op=SLASH
-		| op=DOUBLESTAR
-		| op=PERCENT
-	) ASSIGN expr -> ^(ASSIGN simple_assign_expr ^($op simple_assign_expr expr));
 
 
 pass_stmt: PASS^;
@@ -269,7 +265,7 @@ factor:
 	| power;
 power: array_subscript (DOUBLESTAR power -> ^(DOUBLESTAR array_subscript power) | /*nothing*/ -> array_subscript);
 
-array_subscript: function_operator (LBRACKET expr RBRACKET -> ^(DEREFERENCE function_operator expr) | /*nothing*/ -> function_operator);// FIXME make more generic!
+array_subscript: function_operator (LBRACKET expr RBRACKET -> ^(DEREFERENCE function_operator expr) | /*nothing*/ -> function_operator);
 
 function_operator:
 	(a=atom->$a) (NAME b=atom -> ^(CALLFUNC NAME $a $b))*;
@@ -279,7 +275,8 @@ atom: LPAREN expr RPAREN -> expr
 	| float_constant
 	| variable_name
 	| function_call
-	| cast_expression;
+	| cast_expression
+	;
 
 cast_expression: (CAST^ | BITCAST^) LPAREN! expr AS! type_name RPAREN!;
 
