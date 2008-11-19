@@ -61,7 +61,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			astwalker.ASTWalker.walkAST(self, ast, filename, sourcecode)
 		finally:
 			ASTTypeAnnotator._modulesProcessing.remove(filename)
-		
+
 
 
 
@@ -85,9 +85,9 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			s1 = 'operands can not be coerced'
 			s2 = 'lhs: %s; rhs: %s' % (arg1.esType, arg2.esType)
 			self._raiseException(RecoverableCompileError, tree=arg1, inlineText=s1, postText=s2)
-	
 
-	
+
+
 	def _insertImplicitCastNode(self, exprNode, to):
 		if isinstance(to, ESType):
 			targetT = to
@@ -194,12 +194,12 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		assert(os.path.isabs(self._filename))
 
 		# get path to other module
-		modPath = moduleName.text	
+		modPath = moduleName.text
 		if modPath.startswith('.'):
 			modPath = modPath.split('.')
 			if modPath[0] == '':
 				modPath.pop(0)
-			
+
 			path, ignored = os.path.split(self._filename)
 			for i in range(len(modPath)):
 				if modPath[i] != '':
@@ -308,7 +308,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 				mangling = v
 			else:
 				self._raiseException(RecoverableCompileError, tree=modifierKeys[i], inlineText='unknown function modifier')
-		
+
 
 		esFunction = ESFunction(name.text, self._moduleNode.packageName, self._moduleNode.moduleName, functionType, paramNames, mangling=mangling, linkage=linkage)
 		ast.esFunction = esFunction
@@ -338,12 +338,12 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 
 	def _onBlock(self, ast, blockContent):
-		ast.symbolTable = SymbolTable() # do not use directly! use self._addSymbol etc.	
+		ast.symbolTable = SymbolTable() # do not use directly! use self._addSymbol etc.
 
 		for x in blockContent:
 			self._dispatch(x)
 
-	
+
 	def _onPass(self, ast):
 		pass
 
@@ -432,6 +432,38 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 	def _onFloatConstant(self, ast, constant):
 		# FIXME
 		ast.esType = self._findSymbol(name=u'float64', type_=ESType)
+
+
+	def _onStringConstant(self, ast, constant):
+		# FIXME
+		s = constant.text
+
+		idxDouble = s.find('"')
+		idxSingle = s.find("'")
+		idx = []
+		if idxDouble > -1:
+			idx.append(idxDouble)
+		if idxSingle > -1:
+			idx.append(idxSingle)
+		idx = min(idx)
+
+		prefix = s[:idx]
+
+
+		if idx != 2 or prefix != u'ar':
+			self._raiseException(RecoverableCompileError, tree=constant, inlineText='the only supported strings are ASCII raw strings with prefix \'ar\'')
+
+
+		if prefix == u'ar':
+			for i, c in enumerate(s[idx:]):
+				if not (0 <= ord(c) <= 127):
+					print i, c
+					self._raiseException(RecoverableCompileError, tree=constant, inlineText='string contains non ASCII character at index %d' % i)
+			ast.esType = self._findSymbol(name=u'byte', type_=ESType).derivePointer()
+		else:
+			self._raiseException(RecoverableCompileError, tree=constant, inlineText='unknown string prefix')
+
+
 
 
 	def _onBasicOperator(self, ast, op, arg1, arg2):
@@ -618,7 +650,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 
 
-	
+
 	def _onAssign(self, ast, assigneeExpr, expression):
 		self._onAssignHelper(assigneeExpr, expression)
 
@@ -666,7 +698,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		else:
 			var = ESVariable(variableName.text, int32)
 			self._addSymbol(fromTree=variableName, symbol=var)
-			
+
 		self._dispatch(block)
 
 
@@ -715,7 +747,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		self._dispatch(typeName)
 		ast.esType = typeName.esType
 
-	
+
 	def _onTypeName(self, ast):
 		n = len(ast.children)
 		if n == 1:

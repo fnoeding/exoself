@@ -35,18 +35,18 @@ from estype import ESType
 elementaryTypes = {}
 for i in [8, 16, 32, 64]:
 	elementaryTypes[u'int%d' % i] = ESType([], ('elementary', 'int%d' % i))
-	#elementaryTypes[u'uint%d' % i] = ESType([], ('elementary', 'uint%d' % i))
+	elementaryTypes[u'uint%d' % i] = ESType([], ('elementary', 'uint%d' % i))
 del i
 elementaryTypes[u'bool'] = ESType([], ('elementary', 'bool'))
 elementaryTypes[u'void'] = ESType([], ('elementary', 'void'))
 elementaryTypes[u'float32'] = ESType([], ('elementary', 'float32'))
 elementaryTypes[u'float64'] = ESType([], ('elementary', 'float64'))
+elementaryTypes[u'byte'] = elementaryTypes[u'uint8'].deriveTypedef('byte')
 
 
 
 implicitConversions = {}
 def _buildImplicitConversionsTable():
-	# (u)intN -> float32 / float64?
 	# float32 has 23 bits mantissa --> information loss with int32, int64
 	# float64 has 53 bits mantissa --> information loss with int64
 	# but most of the time the result is really used as a floating point number, so it should be ok

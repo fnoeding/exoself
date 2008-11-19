@@ -213,13 +213,13 @@ class ESType(object):
 				return Type.function(rets, params)
 		elif self.payload[0] == 'elementary':
 			t = self.payload[1]
-			if t == u'int8':
+			if t == u'int8' or t == u'uint8':
 				return Type.int(8)
-			elif t == u'int16':
+			elif t == u'int16' or t == u'uint16':
 				return Type.int(16)
-			elif t == u'int32':
+			elif t == u'int32' or t == u'uint32':
 				return Type.int(32)
-			elif t == u'int64':
+			elif t == u'int64' or t == u'uint64':
 				return Type.int(64)
 			elif t == u'bool':
 				return Type.int(1)

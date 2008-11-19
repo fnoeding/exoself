@@ -223,6 +223,10 @@ class ASTWalker(object):
 			callee = self._onFloatConstant
 			# TODO unpack value; see INTEGER_CONSTANT
 			kwargs['constant'] = ast.children[0]
+		elif t == tt.STRING_CONSTANT:
+			callee = self._onStringConstant
+			# TODO unpack value; see INTEGER_CONSTANT
+			kwargs['constant'] = ast.children[0]
 		elif t == tt.CALLFUNC:
 			callee = self._onCallFunc
 			kwargs['calleeName'] = ast.children[0]

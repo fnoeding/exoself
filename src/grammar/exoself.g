@@ -105,6 +105,7 @@ tokens {
 	SIMPLE_STATEMENT;
 	INTEGER_CONSTANT;
 	FLOAT_CONSTANT;
+	STRING_CONSTANT;
 	VARIABLE;
 	CALLFUNC;
 	ASSIGNLIST;
@@ -141,6 +142,9 @@ fragment IntegerSuffix:
 			| 'l' // int64
 		);
 
+fragment RawString: 'r' '"' (~('"'))* '"';
+
+STRING: (Letter)* RawString;// any arbitrary prefix ending with r will result in a raw string...; FIXME
 INTEGER: (SpacedDigit | ('0x' | '0X') SpacedHexDigit | ('0b' | '0B') SpacedBinaryDigit) IntegerSuffix?;// octal integers are also matched by SpacedDigit
 FLOAT: Float;// TODO HexFloat for exact representation
 NAME: (Letter | '_') (Letter | Digit | '_')*;
@@ -289,6 +293,7 @@ function_operator:
 atom: LPAREN expr RPAREN -> expr
 	| integer_constant
 	| float_constant
+	| string_constant
 	| variable_name
 	| function_call
 	| cast_expression
@@ -301,6 +306,9 @@ integer_constant:
 
 float_constant:
 	FLOAT -> ^(FLOAT_CONSTANT FLOAT);
+
+string_constant:
+	STRING -> ^(STRING_CONSTANT STRING);
 
 variable_name: NAME -> ^(VARIABLE NAME);
 

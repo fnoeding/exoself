@@ -492,6 +492,25 @@ class ModuleTranslator(astwalker.ASTWalker):
 		ast.llvmValue = Constant.real(ast.esType.toLLVMType(), str(value))
 
 
+	def _onStringConstant(self, ast, constant):
+		# FIXME
+		s = constant.text
+		assert(s.startswith('ar"'))
+		s = s[2:]
+
+
+		stringConst = Constant.stringz(s)
+		string = self._module.add_global_variable(stringConst.type, 'internalStringConstant')
+		string.initializer = stringConst
+		string.global_constant = True
+		string.linkage = LINKAGE_INTERNAL
+
+		idx = [Constant.int(Type.int(32), 0), Constant.int(Type.int(32), 0)]
+		ast.llvmValue = string.gep(idx)
+		print ast.llvmValue
+
+
+
 	def _onVariable(self, ast, variableName):
 
 		var = self._findSymbol(fromTree=variableName, type_=ESVariable)
