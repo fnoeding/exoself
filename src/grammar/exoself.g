@@ -261,11 +261,20 @@ term: factor ((STAR^ | SLASH^ | PERCENT^) factor)*;
 factor:
 	PLUS^ factor
 	| MINUS^ factor
-	| STAR power -> ^(DEREFERENCE power) // FIXME move to its own rule; make it more general
+	| STAR factor -> ^(DEREFERENCE factor)
+	| DOUBLESTAR factor -> ^(DEREFERENCE ^(DEREFERENCE factor))
 	| power;
+
+
 power: array_subscript (DOUBLESTAR power -> ^(DOUBLESTAR array_subscript power) | /*nothing*/ -> array_subscript);
 
-array_subscript: function_operator (LBRACKET expr RBRACKET -> ^(DEREFERENCE function_operator expr) | /*nothing*/ -> function_operator);
+array_subscript:
+	function_operator
+	(
+		/* nothing */ -> function_operator
+		| (LBRACKET expr RBRACKET)+ -> ^(DEREFERENCE function_operator expr+) // this get's desugared: x[5][1] becomes (DEREFERENCE (DEREFERENCE 5), 1) etc.
+	);
+
 
 function_operator:
 	(a=atom->$a) (NAME b=atom -> ^(CALLFUNC NAME $a $b))*;

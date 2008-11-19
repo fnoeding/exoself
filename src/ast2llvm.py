@@ -771,10 +771,13 @@ class ModuleTranslator(astwalker.ASTWalker):
 			raise NotImplementedError('cast from %s to %s is not yet supported' % (sourceT, targetT))
 
 
-	def _onDereference(self, ast):
-		# FIXME move ast handling into astwalker!
-		var = self._findSymbol(fromTree=ast.children[0].children[0], type_=ESVariable)
-
+	def _onDereference(self, ast, expression, indexExpression):
+		self._dispatch(expression)
+		if indexExpression:
+			self._dispatch(indexExpression)
+			idx = [indexExpression.llvmValue]
+		else:
+			idx = [Constant.int(Type.int(32), 0)]
 
 		# we have a problem: The derefencing is ambiguous
 		# either we want to load a value from memory --> we need ast.llvmValue
@@ -783,17 +786,8 @@ class ModuleTranslator(astwalker.ASTWalker):
 		# so the optimizer will remove it
 		# for now stay stay with the inefficient code...
 
-		if len(ast.children) == 1:
-			idx = [Constant.int(Type.int(32), 0)]
-		else:
-			self._dispatch(ast.children[1])
-			idx = [ast.children[1].llvmValue]
-
-
 		# every variable is an alloca --> first get the real memory address
-		realAddr = self._currentBuilder.load(var.llvmRef)
-
-		realAddrWithOffset = self._currentBuilder.gep(realAddr, idx)
+		realAddrWithOffset = self._currentBuilder.gep(expression.llvmValue, idx)
 		ast.llvmRef = realAddrWithOffset
 
 		# now load data from it

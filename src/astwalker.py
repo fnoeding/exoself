@@ -271,6 +271,15 @@ class ASTWalker(object):
 			callee = self._onTypeName
 		elif t == tt.DEREFERENCE:
 			callee = self._onDereference
+			kwargs['expression'] = ast.children[0]
+
+			if len(ast.children) == 1:
+				indexExpression = None
+			elif len(ast.children) == 2:
+				indexExpression = ast.children[1]
+			else:
+				assert(0 and 'dead code path')
+			kwargs['indexExpression'] = indexExpression
 		elif t == tt.ALIAS:
 			callee = self._onAlias
 			kwargs['name'] = ast.children[0]

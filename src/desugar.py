@@ -93,7 +93,7 @@ def _desugarMultiAssign(tree):
 		c = tree.children[i]
 		if c.type == TreeType.ASSIGN and c.getChildCount() > 2:
 			# fix this node
-			
+
 			# create new nodes
 			nameNodes = c.children[:-1]
 			exprNode = c.children[-1]
@@ -153,9 +153,43 @@ def _desugarNegativeNumberConstants(tree):
 	valueNode.text = '-' + valueNode.text # numbers are always positive!
 
 
+def _desugarDereference(tree):
+	# DEREFERENCE nodes must have at most 2 children: the pointer expression and optionally an offset
+
+	if tree.type != TreeType.DEREFERENCE:
+		return
+
+	if len(tree.children) <= 2:
+		return
+
+	# x[3][2][1] gets parsed as (DEREFERENCE x 3 2 1)
+	# and it must become (DEREFERENCE (DEREFERENCE (DEREFERENCE x, 3), 2), 1)
+
+	pointer = tree.children[0]
+	offsetsWithoutLast = tree.children[1:-1]
+	lastOffset = tree.children[-1]
+
+	tree.children = []
+
+	current = tree.copy(False)
+	current.children = [pointer, offsetsWithoutLast[0]]
+	offsetsWithoutLast = offsetsWithoutLast[1:]
+	while offsetsWithoutLast:
+
+		new = tree.copy(False)
+		new.children = [current, offsetsWithoutLast[0]]
+
+		current = new
+		offsetsWithoutLast = offsetsWithoutLast[1:]
+
+	tree.children = [current, lastOffset]
+
+
+
+
 
 # actions get called for every node
-_actions = [_desugarLoopElse, _fixPackageAndModuleNames, _desugarNegativeNumberConstants]
+_actions = [_desugarLoopElse, _fixPackageAndModuleNames, _desugarNegativeNumberConstants, _desugarDereference]
 # special actions traverse the tree themselves
 _specialActions = [_desugarMultiAssign]
 

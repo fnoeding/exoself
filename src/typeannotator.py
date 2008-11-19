@@ -737,14 +737,17 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			ast.esType = baseType
 
 
-	def _onDereference(self, ast):
-		# FIXME move ast handling into ast walker!
+	def _onDereference(self, ast, expression, indexExpression):
+		self._dispatch(expression)
+		if indexExpression:
+			self._dispatch(indexExpression)
 
-		if len(ast.children) == 2:
-			self._dispatch(ast.children[1]) # offset expr
+		esType = expression.esType
+		if not esType.isPointer():
+			self._raiseException(RecoverableCompileError, tree=expression, inlineText='can only dereference pointers')
 
-		var = self._findSymbol(fromTree=ast.children[0].children[0], type_=ESVariable)
-		ast.esType = var.esType.dereference()
+
+		ast.esType = esType.dereference()
 
 
 	def _onAlias(self, ast, name, typeName):
