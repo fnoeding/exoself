@@ -114,6 +114,7 @@ tokens {
 	IMPLICITCAST;// used inside the compiler, not the lexer / parser
 	TYPENAME;
 	DEREFERENCE;
+	FUNCTIONOPERATOR;
 }
 
 
@@ -277,7 +278,13 @@ array_subscript:
 
 
 function_operator:
-	(a=atom->$a) (NAME b=atom -> ^(CALLFUNC NAME $a $b))*;
+	a+=atom
+	(
+		/* nothing */ -> $a
+		| (n+=NAME a+=atom)+ -> ^(FUNCTIONOPERATOR $n+ $a+)// gets desugared to ordinary callfunc nodes
+	);
+//	(a=atom->$a) (NAME b=atom -> ^(CALLFUNC NAME $a $b))*;
+
 
 atom: LPAREN expr RPAREN -> expr
 	| integer_constant

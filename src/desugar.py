@@ -186,10 +186,55 @@ def _desugarDereference(tree):
 
 
 
+def _desugarFunctionOperator(tree):
+	# FUNCTIONOPERATOR is in the form (f g h W X Y Z) which was generated from
+	# W f X g Y h Z
+	# this must be transformed to normal function calls
+	# h(g(f(W, X), Y), Z)
+
+	if tree.type != TreeType.FUNCTIONOPERATOR:
+		return
+
+	tree.type = TreeType.CALLFUNC
+	tree.text = u'CALLFUNC'
+
+	n = len(tree.children)
+	nNames = (n - 1) / 2
+
+	if nNames == 1:
+		# changing node type was enough
+		return
+
+	names = tree.children[:nNames]
+	args = tree.children[nNames:-1]
+	lastArg = tree.children[-1]
+
+
+	tree.children = []
+
+	current = tree.copy(False)
+	current.children = [names[0], args[0], args[1]]
+	print current.toStringTree()
+	print current.children[0].text, current.children[0].type
+	names = names[1:]
+	args = args[2:]
+
+	while args:
+		new = tree.copy(False)
+		new.children = [names[0], current, args[0]]
+
+		current = new
+
+		names = names[1:]
+		args = args[1:]
+	tree.children = [names[0], current, lastArg]
+
+
+	print tree.toStringTree()
 
 
 # actions get called for every node
-_actions = [_desugarLoopElse, _fixPackageAndModuleNames, _desugarNegativeNumberConstants, _desugarDereference]
+_actions = [_desugarLoopElse, _fixPackageAndModuleNames, _desugarNegativeNumberConstants, _desugarDereference, _desugarFunctionOperator]
 # special actions traverse the tree themselves
 _specialActions = [_desugarMultiAssign]
 
