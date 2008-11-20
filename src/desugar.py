@@ -214,8 +214,6 @@ def _desugarFunctionOperator(tree):
 
 	current = tree.copy(False)
 	current.children = [names[0], args[0], args[1]]
-	print current.toStringTree()
-	print current.children[0].text, current.children[0].type
 	names = names[1:]
 	args = args[2:]
 
@@ -229,8 +227,6 @@ def _desugarFunctionOperator(tree):
 		args = args[1:]
 	tree.children = [names[0], current, lastArg]
 
-
-	print tree.toStringTree()
 
 
 # actions get called for every node
