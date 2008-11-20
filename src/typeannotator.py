@@ -131,6 +131,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 	def _onModuleStart(self, ast, packageName, moduleName, statements):
 		self._moduleNode = ast
 		ast.symbolTable = None
+		ast.dependencies = []
 
 		if packageName:
 			ast.packageName = packageName.text
@@ -228,6 +229,9 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		if toImport in ASTTypeAnnotator._modulesProcessing:
 			self._raiseException(CompileError, tree=moduleName, inlineText='module caused infinite recursion. Remove any circular imports to fix this problem')
 		# walkAST adds entry to _modulesProcessing!
+
+		# add filename to dependency list
+		self._moduleNode.dependencies.append(toImport)
 
 
 		# load data

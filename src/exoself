@@ -84,6 +84,8 @@ def main():
 	op.add_option('-A', help='generate ast only', dest='astOnly', action='store_true')
 	op.add_option('-S', help='assemble only', dest='asmOnly', action='store_true')
 
+	op.add_option('--save-dependencies', help='saves filenames the compiled module depends on to a file', dest='saveDependencies', default=None)
+
 	op.add_option('--save-temps', help='save temporary files in current directory', dest='saveTemps', action='store_true')
 	op.add_option('--ast2dot', help='save AST as a DOT file for graphviz', dest='ast2dot', action='store_true')
 	op.add_option('--ast2png', help='save AST as a png file (needs graphviz / dot)', dest='ast2png', action='store_true')
@@ -173,6 +175,12 @@ def main():
 	if options.saveTemps:
 		f = file('%s.aast' % baseFN, 'w')
 		pickle.dump(ast, f)
+		f.close()
+
+	if options.saveDependencies:
+		f = file(options.saveDependencies, 'wt')
+		for x in ast.dependencies:
+			f.write('%s\n' % x)
 		f.close()
 
 
