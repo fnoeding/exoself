@@ -12,6 +12,10 @@ def main() as int32
 
 	puts(ar"Hallo Welt!");
 
+	p = &(s[13]);
+	assert p[0] == ar"h"[0];
+	puts(p);
+
 	return 0;
 }
 
