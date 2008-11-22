@@ -68,12 +68,19 @@ def main() as int32
 	assert ppp[5][1][100] == 10000;
 	ppp[0] = pp;
 	assert ***ppp == pp[0][0];
-	
 
-	free(p);
-	free(p2);
-	free(pp);
 	free(ppp);
+	free(pp);
+
+	pp = &p;
+	assert pp[0][10] == p[10];
+	assert (*pp)[11] == p[11];
+
+	**(&p) = 999;
+	assert *p == 999;
+
+	free(p2);
+	free(p);
 
 	return 0;
 }

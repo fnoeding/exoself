@@ -76,6 +76,7 @@ tokens {
 	MINUS = '-';
 	STAR = '*';
 	DOUBLESTAR = '**';
+	AMPERSAND = '&';
 	PERCENT = '%';
 	SLASH = '/';
 	COLON =	':';
@@ -116,6 +117,7 @@ tokens {
 	TYPENAME;
 	DEREFERENCE;
 	FUNCTIONOPERATOR;
+	ADDRESSOF;
 }
 
 
@@ -268,6 +270,7 @@ factor:
 	| MINUS^ factor
 	| STAR factor -> ^(DEREFERENCE factor)
 	| DOUBLESTAR factor -> ^(DEREFERENCE ^(DEREFERENCE factor))
+	| AMPERSAND factor -> ^(ADDRESSOF factor)
 	| power;
 
 

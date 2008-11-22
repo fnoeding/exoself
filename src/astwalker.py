@@ -292,6 +292,9 @@ class ASTWalker(object):
 			callee = self._onTypedef
 			kwargs['name'] = ast.children[0]
 			kwargs['typeName'] = ast.children[1]
+		elif t == tt.ADDRESSOF:
+			callee = self._onAddressOf
+			kwargs['expression'] = ast.children[0]
 		else:
 			print t
 			assert(0 and 'dead code path / support for new token type not implemented')

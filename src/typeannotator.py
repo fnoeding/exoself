@@ -802,6 +802,14 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		self._addSymbol(fromTree=name, symbol=esType)
 
 
+	def _onAddressOf(self, ast, expression):
+		self._dispatch(expression)
+
+		# FIXME make sure that it's possible to take the address of this expression
+
+		ast.esType = expression.esType.derivePointer()
+
+
 
 
 

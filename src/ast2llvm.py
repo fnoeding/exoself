@@ -515,6 +515,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 		var = self._findSymbol(fromTree=variableName, type_=ESVariable)
 		ast.llvmValue = self._currentBuilder.load(var.llvmRef)
+		ast.llvmRef = var.llvmRef
 
 
 
@@ -670,10 +671,13 @@ class ModuleTranslator(astwalker.ASTWalker):
 			# we MUST NOT pass a value to _createAllocaForVar! That value is not available in the entry BB!
 			var.llvmRef = self._createAllocaForVar(var.name, var.esType.toLLVMType())
 
+		print 'A', var.llvmRef, llvmValue
 		self._currentBuilder.store(llvmValue, var.llvmRef)
+		print 'B'
 
 
 	def _onAssign(self, ast, assigneeExpr, expression):
+		print expression.line
 		self._dispatch(expression)
 
 		# FIXME
@@ -819,6 +823,18 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 	def _onTypedef(self, ast, name, typeName):
 		pass
+
+
+	def _onAddressOf(self, ast, expression):
+		self._dispatch(expression)
+
+		# see _onDereference for the ambigous use of this instruction
+
+
+		ast.llvmRef = expression.llvmRef
+		ast.llvmValue = expression.llvmRef
+
+
 
 
 
