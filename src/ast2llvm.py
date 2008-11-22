@@ -496,7 +496,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 		# FIXME
 		s = constant.text
 		assert(s.startswith('ar"'))
-		s = s[2:]
+		s = s[3:-1]
 
 
 		stringConst = Constant.stringz(s)
@@ -637,6 +637,16 @@ class ModuleTranslator(astwalker.ASTWalker):
 				preds[tt.GREATER] = IPRED_SGT
 
 				ast.llvmValue = self._currentBuilder.icmp(preds[op], arg1.llvmValue, arg2.llvmValue)
+			elif arg1.esType.isUnsignedInteger() and arg2.esType.isUnsignedInteger():
+				preds = {}
+				preds[tt.LESS] = IPRED_ULT
+				preds[tt.LESSEQUAL] = IPRED_ULE
+				preds[tt.EQUAL] = IPRED_EQ
+				preds[tt.NOTEQUAL] = IPRED_NE
+				preds[tt.GREATEREQUAL] = IPRED_UGE
+				preds[tt.GREATER] = IPRED_UGT
+
+				ast.llvmValue = self._currentBuilder.icmp(preds[op], arg1.llvmValue, arg2.llvmValue)
 			elif arg1.esType.isFloatingPoint() and arg2.esType.isFloatingPoint():
 				# TODO think about ordered and unordered comparisions...
 				# for now ordered
@@ -649,6 +659,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 				preds[tt.GREATER] = RPRED_OGT
 				ast.llvmValue = self._currentBuilder.fcmp(preds[op], arg1.llvmValue, arg2.llvmValue)
 			else:
+				print arg1.esType, arg2.esType
 				raise NotImplementedError('TODO')
 
 		elif op == tt.DOUBLESTAR:

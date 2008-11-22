@@ -245,38 +245,58 @@ class ESType(object):
 
 
 	def isFunction(self):
-		return self.payload[0] == 'function'
+		p = self
+		while p.payload[0] == 'typedef':
+			p = p.parents[0]
+
+		return p.payload[0] == 'function'
 
 
 	def isPointer(self):
-		return self.payload[0] == 'pointer'
+		p = self
+		while p.payload[0] == 'typedef':
+			p = p.parents[0]
+
+		return p.payload[0] == 'pointer'
 
 
 	def isSignedInteger(self):
-		if self.payload[0] != 'elementary':
+		p = self
+		while p.payload[0] == 'typedef':
+			p = p.parents[0]
+
+		if p.payload[0] != 'elementary':
 			return False
 
-		if self.payload[1] in ['int8', 'int16', 'int32', 'int64']:
+		if p.payload[1] in ['int8', 'int16', 'int32', 'int64']:
 			return True
 
 		return False
 
 
 	def isUnsignedInteger(self):
-		if self.payload[0] != 'elementary':
+		p = self
+		while p.payload[0] == 'typedef':
+			p = p.parents[0]
+
+		if p.payload[0] != 'elementary':
 			return False
 
-		if self.payload[1] in ['uint8', 'uint16', 'uint32', 'uint64']:
+		if p.payload[1] in ['uint8', 'uint16', 'uint32', 'uint64']:
 			return True
 
 		return False
 
 
 	def isFloatingPoint(self):
-		if self.payload[0] != 'elementary':
+		p = self
+		while p.payload[0] == 'typedef':
+			p = p.parents[0]
+
+		if p.payload[0] != 'elementary':
 			return False
 
-		if self.payload[1] in ['float32', 'float64']:
+		if p.payload[1] in ['float32', 'float64']:
 			return True
 
 		return False
