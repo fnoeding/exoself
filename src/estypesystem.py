@@ -43,6 +43,9 @@ elementaryTypes[u'float32'] = ESType([], ('elementary', 'float32'))
 elementaryTypes[u'float64'] = ESType([], ('elementary', 'float64'))
 elementaryTypes[u'byte'] = elementaryTypes[u'uint8'].deriveTypedef('byte')
 
+# FIXME the type word has the role of 'usize_t' and must always have the size of the pointer type
+elementaryTypes[u'word'] = elementaryTypes[u'uint64'].deriveTypedef('word')
+
 
 
 implicitConversions = {}
