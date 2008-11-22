@@ -98,7 +98,25 @@ def AST2DOT(ast):
 	r = ['digraph G\n{']
 	def walk(t, idGen):
 		selfI = idGen.next()
-		r.append('n%d [label="%s"];' % (selfI, t.text))
+
+		label = []
+		label.append('<')
+		label.append('<table border="0" cellborder="0" cellpadding="3" bgcolor="white">')
+
+		label.append('<tr><td bgcolor="black" align="center" colspan="2"><font color="white">%s</font></td></tr>' % t.text) # FIXME use t.type as symbolic string
+
+		def createRow(s1, s2=''):
+			return '<tr><td align="left">%s</td><td align="left">%s</td></tr>' % (s1, s2)
+
+		label.append(createRow('%s, %s' % (t.line, t.charPos)))
+
+		label.append('</table>')
+		label.append('>')
+
+		label = ''.join(label)
+
+		r.append('n%d [ label=%s, style="filled, bold" penwidth=5 fillcolor="white" shape="Mrecord" ];' % (selfI, label))
+		#r.append('n%d [label="%s"];' % (selfI, t.text))
 
 		n = t.getChildCount()
 		for x in range(n):
