@@ -507,7 +507,6 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 		idx = [Constant.int(Type.int(32), 0), Constant.int(Type.int(32), 0)]
 		ast.llvmValue = string.gep(idx)
-		print ast.llvmValue
 
 
 
@@ -671,13 +670,10 @@ class ModuleTranslator(astwalker.ASTWalker):
 			# we MUST NOT pass a value to _createAllocaForVar! That value is not available in the entry BB!
 			var.llvmRef = self._createAllocaForVar(var.name, var.esType.toLLVMType())
 
-		print 'A', var.llvmRef, llvmValue
 		self._currentBuilder.store(llvmValue, var.llvmRef)
-		print 'B'
 
 
 	def _onAssign(self, ast, assigneeExpr, expression):
-		print expression.line
 		self._dispatch(expression)
 
 		# FIXME
