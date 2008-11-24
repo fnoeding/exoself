@@ -45,6 +45,7 @@ elementaryTypes[u'byte'] = elementaryTypes[u'uint8'].deriveTypedef('byte')
 
 # FIXME the type word has the role of 'usize_t' and must always have the size of the pointer type
 elementaryTypes[u'word'] = elementaryTypes[u'uint64'].deriveTypedef('word')
+elementaryTypes[u'sword'] = elementaryTypes[u'int64'].deriveTypedef('sword')
 
 
 
