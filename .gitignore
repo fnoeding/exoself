@@ -2,8 +2,8 @@
 3rdparty/llvm-py/www
 3rdparty/llvm-py/build
 3rdparty/pylibs/llvm
-src/grammar/exoselfLexer.py
-src/grammar/exoselfParser.py
-src/grammar/exoself.tokens
-src/grammar/exoself__.g
+src/compiler/grammar/exoselfLexer.py
+src/compiler/grammar/exoselfParser.py
+src/compiler/grammar/exoself.tokens
+src/compiler/grammar/exoself__.g
 tests_tmp/*

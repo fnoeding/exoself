@@ -44,7 +44,7 @@ def runExoself(filebase, opts, quiet=False, expectCompileError=False):
 	if quiet:
 		postFix = ' 1> /dev/null 2> /dev/null'
 
-	cmd = '../src/exoself --save-temps %s %s.es %s' % (opts, filebase, postFix)
+	cmd = '../src/compiler/exoself --save-temps %s %s.es %s' % (opts, filebase, postFix)
 	p = subprocess.Popen(cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 	d = p.stdout.read().strip()
 	d2 = p.stderr.read().strip()
@@ -123,8 +123,8 @@ def main():
 
 	# switch to temp dir, cleanup
 	# several temporary files will be generated here
-	os.chdir('../tests_tmp')
-	os.system('rm -f *.ll *.bc')
+	os.chdir('../../tests_tmp')
+	os.system('rm -f *.ll *.bc *.ast *.aast')
 
 	total = 0
 	failed = 0

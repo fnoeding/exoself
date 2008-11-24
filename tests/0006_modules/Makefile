@@ -1,6 +1,6 @@
 LLI=lli
 LLVM_LINK=llvm-link
-EXOSELF=../../src/exoself
+EXOSELF=../../src/compiler/exoself
 EXOSELF_OPTS=-I .
 
 
