@@ -138,13 +138,15 @@ fragment SpacedBinaryDigit: BinaryDigit ((BinaryDigit | '_')* BinaryDigit)?;
 fragment Float: Digit* '.' Digit+ (('e' | 'E') ('+' | '-')? Digit+)?;
 
 fragment IntegerSuffix:
-		('u')? // unsigned
-		(
-			'hh' // int8
-			| 'h' // int16
-			// int32 has no suffix
-			| 'l' // int64
-		);
+	'uhh' // uint8
+	| 'uh' // uint16
+	| 'u' // uint32
+	| 'ul' // uint64
+	| 'h' // int8
+	| 'hh' // int16
+	// uint32 has no suffix
+	| 'l' // int64
+	;
 
 fragment RawString: 'r' '"' (~('"'))* '"';
 

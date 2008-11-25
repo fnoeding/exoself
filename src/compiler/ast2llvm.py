@@ -780,6 +780,39 @@ class ModuleTranslator(astwalker.ASTWalker):
 				ast.llvmValue = self._currentBuilder.fptosi(expression.llvmValue, targetT.toLLVMType())
 			else:
 				bad = True
+		elif targetT.isUnsignedInteger():
+			if sourceT.isEquivalentTo(bool, False):
+				bad = True # FIXME
+			elif sourceT.isUnsignedInteger():
+				t = targetT.toLLVMType()
+				s = sourceT.toLLVMType()
+
+				tBits = t.width
+				sBits = s.width
+
+				if sBits > tBits:
+					ast.llvmValue = self._currentBuilder.trunc(expression.llvmValue, t)
+				elif sBits < tBits:
+					ast.llvmValue = self._currentBuilder.zext(expression.llvmValue, t)
+				else:
+					assert(0 and 'dead code path; should have been caught by other checks!')
+
+			elif sourceT.isSignedInteger():
+				t = targetT.toLLVMType()
+				s = sourceT.toLLVMType()
+
+				tBits = t.width
+				sBits = s.width
+
+				if sBits > tBits:
+					raise NotImplementedError()
+				elif sBits < tBits:
+					ast.llvmValue = self._currentBuilder.sext(expression.llvmValue, t)
+				else:
+					# FIXME???
+					ast.llvmValue = expression.llvmValue
+			else:
+				bad = True
 		elif targetT.isFloatingPoint():
 			if sourceT.isSignedInteger():
 				ast.llvmValue = self._currentBuilder.sitofp(expression.llvmValue, targetT.toLLVMType())

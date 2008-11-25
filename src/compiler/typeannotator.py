@@ -404,7 +404,16 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			else:
 				self._raiseException(RecoverableCompileError, tree=ast, inlineText='constant can not be represented by an int64')
 		else:
-			raise NotImplementedError('uintN not supported, yet')
+			if value < 2 ** 8:
+				bits = 8
+			elif value < 2 ** 16:
+				bits = 16
+			elif value < 2 ** 32:
+				bits = 32
+			elif value < 2 ** 64:
+				bits = 64
+			else:
+				self._raiseException(RecoverableCompileError, tree=ast, inlineText='constant can not be represented by an uint64')
 
 		ast.signed = signed
 		ast.minBits = bits
