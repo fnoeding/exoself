@@ -842,6 +842,18 @@ class ModuleTranslator(astwalker.ASTWalker):
 		ast.llvmValue = expression.llvmRef
 
 
+	def _onNew(self, ast, typeName, numExpr):
+		if numExpr:
+			self._dispatch(numExpr)
+			numElements = numExpr.llvmValue
+		else:
+			numElements = Constant.int(Type.int(32), 1)
+
+
+		ast.llvmValue = self._currentBuilder.malloc_array(ast.esType.dereference().toLLVMType(), numElements)
+
+
+
 
 
 

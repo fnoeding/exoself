@@ -295,6 +295,20 @@ class ASTWalker(object):
 		elif t == tt.ADDRESSOF:
 			callee = self._onAddressOf
 			kwargs['expression'] = ast.children[0]
+		elif t == tt.NEW:
+			callee = self._onNew
+			kwargs['typeName'] = ast.children[0]
+
+			
+			if len(ast.children) == 1:
+				numExpr = None
+			elif len(ast.children) == 2:
+				numExpr = ast.children[1]
+			else:
+				assert(0 and 'dead code path')
+
+			kwargs['numExpr'] = numExpr
+
 		else:
 			print t
 			assert(0 and 'dead code path / support for new token type not implemented')

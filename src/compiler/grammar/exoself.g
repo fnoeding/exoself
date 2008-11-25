@@ -69,6 +69,8 @@ tokens {
 	BITCAST = 'bitcast';
 	ALIAS = 'alias';
 	TYPEDEF = 'typedef';
+	NEW = 'new';
+	DELETE = 'delete';// for now only reserved
 
 	// operators
 	SEMI = ';';
@@ -300,9 +302,12 @@ atom: LPAREN expr RPAREN -> expr
 	| variable_name
 	| function_call
 	| cast_expression
+	| new_expression
 	;
 
 cast_expression: (CAST^ | BITCAST^) LPAREN! expr AS! type_name RPAREN!;
+
+new_expression: NEW^ LPAREN! type_name (COMMA! expr)? RPAREN!;
 
 integer_constant:
 	INTEGER -> ^(INTEGER_CONSTANT INTEGER);

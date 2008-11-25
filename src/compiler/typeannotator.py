@@ -810,6 +810,18 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		ast.esType = expression.esType.derivePointer()
 
 
+	def _onNew(self, ast, typeName, numExpr):
+		self._dispatch(typeName)
+		ast.esType = typeName.esType.derivePointer()
+
+		if numExpr:
+			self._dispatch(numExpr)
+			t = numExpr.esType
+
+			# FIXME check type!
+
+
+
 
 
 
