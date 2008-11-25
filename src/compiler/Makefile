@@ -1,7 +1,7 @@
 
 
 JAVA=java
-ANTLR_DIR=../3rdparty/antlr
+ANTLR_DIR=../../3rdparty/antlr
 ANTLR=antlr-3.1.1.jar
 ANTLR_CMD=${JAVA} -cp ${ANTLR_DIR}/${ANTLR} org.antlr.Tool
 
