@@ -90,13 +90,13 @@ def _buildImplicitConversionsTable():
 	l= []
 	for x in u'bool uint16 uint32 uint64 float32 float64'.split():
 		l.append(elementaryTypes[x])
-	implicitConversions[elementaryTypes[u'uint32']] = l
+	implicitConversions[elementaryTypes[u'uint8']] = l
 
 	# uint16 to other
 	l= []
 	for x in u'bool uint32 uint64 float32 float64'.split():
 		l.append(elementaryTypes[x])
-	implicitConversions[elementaryTypes[u'uint32']] = l
+	implicitConversions[elementaryTypes[u'uint16']] = l
 
 	# uint32 to other
 	l = []
@@ -108,7 +108,7 @@ def _buildImplicitConversionsTable():
 	l= []
 	for x in u'bool float32 float64'.split():
 		l.append(elementaryTypes[x])
-	implicitConversions[elementaryTypes[u'uint32']] = l
+	implicitConversions[elementaryTypes[u'uint64']] = l
 
 	# float32 to other
 	l = []
