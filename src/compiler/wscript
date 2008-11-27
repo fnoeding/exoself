@@ -30,7 +30,6 @@ esvariable.py
 exoself
 lexer.py
 parser.py
-runtests.py
 setuppaths.py
 source2ast.py
 symboltable.py
