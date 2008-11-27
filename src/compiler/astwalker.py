@@ -299,7 +299,6 @@ class ASTWalker(object):
 			callee = self._onNew
 			kwargs['typeName'] = ast.children[0]
 
-			
 			if len(ast.children) == 1:
 				numExpr = None
 			elif len(ast.children) == 2:
@@ -308,7 +307,21 @@ class ASTWalker(object):
 				assert(0 and 'dead code path')
 
 			kwargs['numExpr'] = numExpr
-
+		elif t == tt.STRUCT:
+			callee = self._onDefStruct
+			kwargs['name'] = ast.children[0]
+			
+			varNames = []
+			varTypes = []
+			for i in range((len(ast.children) - 1) / 2):
+				varNames.append(ast.children[1 + 2 * i])
+				varTypes.append(ast.children[1 + 2 * i + 1])
+			kwargs['varNames'] = varNames
+			kwargs['varTypes'] = varTypes
+		elif t == tt.MEMBERACCESS:
+			callee = self._onMemberAccess
+			kwargs['expression'] = ast.children[0]
+			kwargs['name'] = ast.children[1]
 		else:
 			print t
 			assert(0 and 'dead code path / support for new token type not implemented')

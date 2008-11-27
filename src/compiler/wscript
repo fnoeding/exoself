@@ -18,7 +18,6 @@ def computeHash(bld):
 
 
 	files = '''ast2llvm.py
-astviewer.py
 astwalker.py
 desugar.py
 errors.py
@@ -53,7 +52,9 @@ grammar/exoselfParser.py
 
 
 def build(bld):
-	bld.exec_command('make -C src/compiler') # FIXME ugly!!!
+	if bld.exec_command('make -C src/compiler'): # FIXME ugly!!!
+		import Utils
+		raise Utils.WafError('translation of exoself grammar failed')
 
 	bld.add_group()
 	

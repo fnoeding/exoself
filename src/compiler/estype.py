@@ -70,8 +70,8 @@ class ESType(object):
 
 
 	@staticmethod
-	def createStruct(name, parts):
-		return ESType(parts, ('struct', name))
+	def createStruct(name, parts, partNames):
+		return ESType(parts, ('struct', name, partNames))
 
 
 	@staticmethod
@@ -260,6 +260,14 @@ class ESType(object):
 		return p.payload[0] == 'pointer'
 
 
+	def isStruct(self):
+		p = self
+		while p.payload[0] == 'typedef':
+			p = p.parents[0]
+
+		return p.payload[0] == 'struct'
+
+
 	def isSignedInteger(self):
 		p = self
 		while p.payload[0] == 'typedef':
@@ -309,12 +317,47 @@ class ESType(object):
 
 		return self.parents[:n]
 
+
 	def getFunctionParameterTypes(self):
 		assert(self.isFunction())
 
 		n = self.payload[1]
 
 		return self.parents[n:]
+
+
+	def getStructMembers(self):
+		assert(self.isStruct())
+
+		m = []
+		for i in range(len(self.parents)):
+			name = self.payload[2][i]
+			type_ = self.parents[i]
+			m.append(name, type_)
+
+		return m
+
+
+	def getStructMemberTypeByName(self, name):
+		assert(self.isStruct())
+
+		for i in range(len(self.parents)):
+			if name == self.payload[2][i]:
+				return self.parents[i]
+
+		return None
+
+
+	def getStructMemberIndexByName(self, name):
+		assert(self.isStruct())
+
+		for i in range(len(self.parents)):
+			if name == self.payload[2][i]:
+				return i
+
+		raise AssertionError('getStructMemberIndexByName should always succeed as it is only called after type checking...')
+
+
 
 
 	def mangleName(self, mode):

@@ -71,6 +71,7 @@ tokens {
 	TYPEDEF = 'typedef';
 	NEW = 'new';
 	DELETE = 'delete';// for now only reserved
+	STRUCT = 'struct';
 
 	// operators
 	SEMI = ';';
@@ -120,6 +121,7 @@ tokens {
 	DEREFERENCE;
 	FUNCTIONOPERATOR;
 	ADDRESSOF;
+	MEMBERACCESS;
 }
 
 
@@ -173,15 +175,15 @@ WS: (' ' | '\t')+ {$channel=HIDDEN;};
 start_module: package_stmt? module_stmt? global_stmt* EOF-> ^(MODULESTART package_stmt? module_stmt? global_stmt*);
 
 
-package_stmt: PACKAGE^ package_name;
+package_stmt: PACKAGE^ package_name (SEMI!)?;
 package_name: NAME (DOT NAME)*;
-module_stmt: MODULE^ NAME;
+module_stmt: MODULE^ NAME (SEMI!)?;
 
 
-global_stmt: deffunc | import_stmt | typedef_stmt | alias_stmt;
+global_stmt: deffunc | import_stmt | typedef_stmt | alias_stmt | defstruct;
 
 import_stmt:
-	FROM module_name IMPORT STAR -> ^(IMPORTALL module_name);
+	FROM module_name IMPORT STAR SEMI?-> ^(IMPORTALL module_name);
 module_name: DOT* NAME (DOT NAME)*;
 
 
@@ -257,6 +259,10 @@ block: LCURLY
 block_content: block | compound_stmt;
 
 
+
+defstruct: STRUCT^ NAME LCURLY! (variable_as_type SEMI!)+ RCURLY!;
+
+
 test_expr: or_test;
 or_test: xor_test (OR^ xor_test)*;
 xor_test: and_test (XOR^ and_test)*;
@@ -285,6 +291,7 @@ array_subscript:
 	(
 		/* nothing */ -> function_operator
 		| (LBRACKET expr RBRACKET)+ -> ^(DEREFERENCE function_operator expr+) // this get's desugared: x[5][1] becomes (DEREFERENCE (DEREFERENCE 5), 1) etc.
+		| (DOT NAME)+ -> ^(MEMBERACCESS function_operator NAME+)
 	);
 
 

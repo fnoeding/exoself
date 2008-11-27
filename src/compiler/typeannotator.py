@@ -652,7 +652,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			else:
 				if not var.esType.isEquivalentTo(esType, False):
 					self._insertImplicitCastNode(exprNode, var.esType)
-		elif assigneeExpr.type == TreeType.DEREFERENCE:
+		elif assigneeExpr.type in (TreeType.DEREFERENCE, TreeType.MEMBERACCESS):
 			self._dispatch(assigneeExpr)
 
 			if not assigneeExpr.esType.isEquivalentTo(esType, False):
@@ -828,6 +828,37 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			t = numExpr.esType
 
 			# FIXME check type!
+
+
+	def _onDefStruct(self, ast, name, varNames, varTypes):
+		esTypes = []
+		names = []
+		for i in range(len(varTypes)):
+			self._dispatch(varTypes[i])
+			esTypes.append(varTypes[i].esType)
+
+			names.append(varNames[i].text)
+
+		# TODO check for duplicate names
+
+		structType = ESType.createStruct(name.text, esTypes, names) # FIXME use a name derived from name, module name and package name!
+
+		self._addSymbol(fromTree=name, symbol=structType)
+
+
+
+	def _onMemberAccess(self, ast, expression, name):
+		self._dispatch(expression)
+
+		esType = expression.esType
+		if esType.isStruct():
+			m = esType.getStructMemberTypeByName(name.text)
+			if not m:
+				self._raiseException(RecoverableCompileError, tree=name, inlineText='struct has no such member')
+			ast.esType = m
+		else:
+			self._raiseException(RecoverableCompileError, tree=ast, inlineText='can not use member access on this expression')
+
 
 
 

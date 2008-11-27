@@ -527,6 +527,8 @@ class ModuleTranslator(astwalker.ASTWalker):
 			defaultValue = Constant.real(llvmType, 0)
 		elif llvmType.kind == TYPE_POINTER:
 			defaultValue = Constant.null(llvmType)
+		elif llvmType.kind == TYPE_STRUCT:
+			defaultValue= Constant.null(llvmType)
 		else:
 			assert(0 and 'unsupported variable type')
 
@@ -692,7 +694,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 			variableName = assigneeExpr.children[0]
 			var = self._findSymbol(fromTree=variableName, type_=ESVariable)
 			self._simpleAssignment(var, expression.llvmValue)
-		elif assigneeExpr.type == TreeType.DEREFERENCE:
+		elif assigneeExpr.type in (TreeType.DEREFERENCE, TreeType.MEMBERACCESS):
 			self._dispatch(assigneeExpr)
 
 			#variableName = assigneeExpr.children[0]
@@ -886,6 +888,25 @@ class ModuleTranslator(astwalker.ASTWalker):
 		ast.llvmValue = self._currentBuilder.malloc_array(ast.esType.dereference().toLLVMType(), numElements)
 
 
+	def _onDefStruct(self, ast, name, varNames, varTypes):
+		pass
+
+
+	def _onMemberAccess(self, ast, expression, name):
+		self._dispatch(expression)
+
+		if expression.esType.isStruct():
+			llvmRef = expression.llvmRef
+
+			memberIdx = expression.esType.getStructMemberIndexByName(name.text)
+			idx = [Constant.int(Type.int(32), 0), Constant.int(Type.int(32), memberIdx)]
+
+			realAddrWithOffset = self._currentBuilder.gep(llvmRef, idx)
+
+			ast.llvmRef = realAddrWithOffset
+			ast.llvmValue = self._currentBuilder.load(realAddrWithOffset)
+		else:
+			assert(0 and 'dead code path')
 
 
 
