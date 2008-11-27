@@ -11,3 +11,9 @@ Quickstart
 3. in the root directory execute ``./waf configure`` followd by ``./waf`` and ``./waf check``
 
 
+Notes for OS X users
+--------------------
+Instead of installing llvm manually you can also try to use llvm from macports:
+sudo port install llvm
+
+
