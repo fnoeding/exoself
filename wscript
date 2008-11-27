@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import os
+import Utils
 
 srcdir = 'src'
 blddir = 'build'
@@ -46,7 +47,9 @@ def configure(conf):
 	# setup 3rdparty tools
 	oldCwd = os.path.abspath(os.getcwd())
 	os.chdir(os.path.join(root, '3rdparty'))
-	os.system('./setup.sh')
+	if os.system('./setup.sh'):
+		# failed...
+		raise Utils.WafError('could not setup 3rd party modules')
 	os.chdir(oldCwd)
 	
 
