@@ -1,7 +1,8 @@
 module nbody
 
+from exoself.c.stdlib import *
+from exoself.c.math import *
 
-def(mangling=C) sqrt(x as float64) as float64;
 
 // no global constants, yet
 def getPi() as float64
@@ -23,7 +24,7 @@ def getDaysPerYear() as float64
 
 
 
-def advance(n as int32,
+def advance(n as uint32,
 			x as float64*, y as float64*, z as float64*,
 			vx as float64*, vy as float64*, vz as float64*,
 			m as float64*,
@@ -61,7 +62,7 @@ def advance(n as int32,
 
 
 
-def calcEnergy(n as int32,
+def calcEnergy(n as uint32,
 			x as float64*, y as float64*, z as float64*,
 			vx as float64*, vy as float64*, vz as float64*,
 			m as float64*) as float64
@@ -88,7 +89,7 @@ def calcEnergy(n as int32,
 }
 
 
-def offsetMomentum(n as int32,
+def offsetMomentum(n as uint32,
 			x as float64*, y as float64*, z as float64*,
 			vx as float64*, vy as float64*, vz as float64*,
 			m as float64*) as void
@@ -111,23 +112,19 @@ def offsetMomentum(n as int32,
 
 
 
-// also no runtime, yet
-def(mangling=C) malloc(size as int64) as void*;
-def(mangling=C) free(p as void*) as void;
-
 
 
 def main() as int32
 {
-	n = 5;
+	n = 5u;
 
-	x = cast(malloc(n * 8) as float64*);
-	y = cast(malloc(n * 8) as float64*);
-	z = cast(malloc(n * 8) as float64*);
-	vx = cast(malloc(n * 8) as float64*);
-	vy = cast(malloc(n * 8) as float64*);
-	vz = cast(malloc(n * 8) as float64*);
-	m = cast(malloc(n * 8) as float64*);
+	x = cast(malloc(n * 8u) as float64*);
+	y = cast(malloc(n * 8u) as float64*);
+	z = cast(malloc(n * 8u) as float64*);
+	vx = cast(malloc(n * 8u) as float64*);
+	vy = cast(malloc(n * 8u) as float64*);
+	vz = cast(malloc(n * 8u) as float64*);
+	m = cast(malloc(n * 8u) as float64*);
 
 	// sun
 	x[0] = y[0] = z[0] = vx[0] = vy[0] = vz[0] = 0;
@@ -172,11 +169,11 @@ def main() as int32
 
 	// init simulation
 	N = 50_000_000;
-	offsetMomentum(5, x, y, z, vx, vy, vz, m);
+	offsetMomentum(n, x, y, z, vx, vy, vz, m);
 
 	// check initial energy
 	// e should be -0.169075164
-	e = calcEnergy(5, x, y, z, vx, vy, vz, m);
+	e = calcEnergy(n, x, y, z, vx, vy, vz, m);
 	de = e - (-0.169075164);
 	if de < 0
 	{
@@ -207,7 +204,7 @@ def main() as int32
 	if N == 50_000_000
 	{
 		// e should be -0.169059907
-		e = calcEnergy(5, x, y, z, vx, vy, vz, m);
+		e = calcEnergy(n, x, y, z, vx, vy, vz, m);
 		de = e - (-0.169059907);
 		if de < 0
 		{

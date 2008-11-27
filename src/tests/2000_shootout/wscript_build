@@ -8,6 +8,13 @@ nbody.llvmTaregt = 'nbody.bc'
 nbody.target = 'nbody_es'
 nbody.uselib = 'm'
 
+# TODO add optimization
+nbodyC = bld.new_task_gen('cc', 'program')
+nbodyC.source = 'nbody.c'
+nbodyC.target = 'nbody_c'
+nbodyC.uselib = 'M'
+
+
 
 
 

@@ -29,6 +29,8 @@ def configure(conf):
 	conf.check_tool('gcc')
 	conf.check_tool('g++')
 
+	conf.env['LIB_M'] = 'm'
+
 	# exoself
 	conf.check_tool('exoself', tooldir='./waftools')
 	conf.env.append_unique('EXOSELF_SEARCHPATH', os.path.join(root, 'src', 'runtime'))
