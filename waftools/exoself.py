@@ -19,7 +19,7 @@ def detect(conf):
 
 
 
-Task.simple_task_type('exoself', '${EXOSELF} -c -o ${TGT} ${SRC}', color='BLUE')
+Task.simple_task_type('exoself', '${EXOSELF} ${EXOSELF_OPTIONS} -c -o ${TGT} ${SRC}', color='BLUE')
 Task.simple_task_type('llvm-link', '${LLVM_LINK} -f -o ${TGT} ${SRC}')
 Task.simple_task_type('llvm-llc', '${LLVM_LLC} -f -o ${TGT} ${SRC}')
 Task.simple_task_type('llvm-native-compile', '${LLVM_NATIVE_C} -c -o ${TGT} ${SRC}')
@@ -50,6 +50,12 @@ def apply_source(self):
 	searchDirs = [self.path]
 	searchDirs.extend(self.path.dirs())
 
+	# setup env for exoself
+	exoselfEnv = self.env.copy()
+	for x in self.env['EXOSELF_SEARCHPATH']:
+		exoselfEnv.append_unique('EXOSELF_OPTIONS', '-I %s' % x)
+
+
 	# compile .es to .bc
 	compileTasks = []
 	for filename in self.source.split():
@@ -65,7 +71,7 @@ def apply_source(self):
 
 		outNode = inNode.change_ext('.bc')
 
-		t = self.create_task('exoself')
+		t = self.create_task('exoself', exoselfEnv)
 		t.set_inputs(inNode)
 		t.set_outputs(outNode)
 		compileTasks.append(t)
@@ -74,7 +80,8 @@ def apply_source(self):
 
 		# force rebuild when compiler was changed
 		# everything depending on this file will also need an update!
-		self.bld.add_manual_dependency(outNode, self.bld.ESCompilerHash)
+		if hasattr(self.bld, 'ESCompilerHash'):
+			self.bld.add_manual_dependency(outNode, self.bld.ESCompilerHash)
 
 
 	# TODO call opt
