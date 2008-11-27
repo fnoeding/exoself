@@ -1,0 +1,19 @@
+#!/usr/bin/python
+
+
+def makeTest(bld, sources, destBase, dirs='.'):
+	test = bld.new_task_gen('es')
+	test.find_sources_in_dirs(dirs)
+	test.source = sources
+	test.llvmTarget = destBase + '.bc'
+	test.target = destBase
+	test.unit_test = True
+
+
+makeTest(bld, 't001_main.es t001_mod.es', 't001')
+makeTest(bld, 't002_main.es t002_moda.es t002_modb.es', 't002')
+makeTest(bld, 't003_main.es', 't003')
+makeTest(bld, 't004_main.es t004_moda.es t004_modb.es', 't004')
+makeTest(bld, 't005_main.es', 't005')
+makeTest(bld, 't006_main.es moda.es modb.es', 't006_', dirs='. t006') # do not use t006 as destBase name - that will conflict with the dir name
+	

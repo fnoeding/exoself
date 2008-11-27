@@ -1,0 +1,29 @@
+#!/usr/bin/python
+
+
+def set_options(opt):
+	pass
+
+def configure(conf):
+	pass
+
+def build(bld):
+	hackslib = bld.new_task_gen('cc', 'shlib')
+	hackslib.source = 'formatting.c'
+	hackslib.target = 'hacks'
+
+	# we have to separate the build phases, so that hackslib is build BEFORE the test app
+	bld.add_group()
+
+
+	test = bld.new_task_gen('es')
+	test.source = 'test.es test2.es'
+	test.llvmTarget = 'hackstest.bc'
+	test.target = 'hackstest'
+	test.uselib_local = 'hacks'
+
+
+
+	
+
+

@@ -1,0 +1,24 @@
+#!/usr/bin/python
+
+l = bld.glob('*.es')
+lRet = bld.glob('*.ret')
+for x in l:
+	base = x[:-3]
+
+	test = bld.new_task_gen('es')
+	test.source = base + '.es'
+	test.llvmTarget = base + '.bc'
+	test.target = base
+	test.unit_test = True
+
+	if (base + '.ret') in lRet:
+		p = os.path.join(bld.path.abspath(), base + '.ret')
+
+		# someone overwrote 'file'...
+		f = file.__class__(p, 'rt')
+		test.expected_ret_code = int(f.read()) & 0xFF
+		if test.expected_ret_code < 0:
+			test.expected_ret_code = 256 - abs(test.expected_ret_code)
+		f.close()
+		del f
+	

@@ -7,3 +7,5 @@ src/compiler/grammar/exoselfParser.py
 src/compiler/grammar/exoself.tokens
 src/compiler/grammar/exoself__.g
 tests_tmp/*
+.lock-wscript
+.waf-*

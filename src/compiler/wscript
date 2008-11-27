@@ -1,0 +1,68 @@
+#!/usr/bin/python
+
+
+def set_options(opt):
+	pass
+
+def configure(conf):
+	pass
+
+
+
+def computeHash(bld):
+	import hashlib
+	import os
+
+	md5 = hashlib.md5()
+	path = bld.path.abspath()
+
+
+	files = '''ast2llvm.py
+astviewer.py
+astwalker.py
+desugar.py
+errors.py
+esfunction.py
+estype.py
+estypesystem.py
+esvalue.py
+esvariable.py
+exoself
+lexer.py
+parser.py
+runtests.py
+setuppaths.py
+source2ast.py
+symboltable.py
+tree.py
+typeannotator.py
+grammar/exoself.g
+grammar/exoselfLexer.py
+grammar/exoselfParser.py
+'''
+
+	for x in files.split():
+		p = os.path.join(path, x)
+
+		f = file(p)
+		md5.update(f.read())
+		f.close()
+
+	return md5.hexdigest()
+
+
+
+
+def build(bld):
+	bld.exec_command('make -C src/compiler') # FIXME ugly!!!
+
+	bld.add_group()
+	
+	bld.ESCompilerHash = computeHash(bld)
+
+
+	#bld.add_manual_dependency(bld.path.find_or_declare('whatever'), grammarDependencyNode)
+
+
+
+

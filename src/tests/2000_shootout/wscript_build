@@ -1,0 +1,13 @@
+#!/usr/bin/python
+
+
+
+nbody = bld.new_task_gen('es')
+nbody.source = 'nbody.es'
+nbody.llvmTaregt = 'nbody.bc'
+nbody.target = 'nbody_es'
+nbody.uselib = 'm'
+
+
+
+

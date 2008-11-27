@@ -1,0 +1,12 @@
+#!/usr/bin/python
+
+l = bld.glob('*.es')
+for x in l:
+	base = x[:-3]
+
+	test = bld.new_task_gen('es')
+	test.source = base + '.es'
+	test.llvmTarget = base + '.bc'
+	test.target = base
+	test.unit_test = True
+	

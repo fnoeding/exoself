@@ -1,0 +1,20 @@
+#!/usr/bin/python
+import os
+
+
+def set_options(opt):
+	pass
+
+def configure(conf):
+	pass
+
+
+def build(bld):
+	basePath = os.path.join('src', 'tests')
+	l = os.listdir(basePath)
+
+	for x in l:
+		p = os.path.join(basePath, x, 'wscript_build')
+		if os.path.exists(p):
+			bld.add_subdirs(x)
+	
