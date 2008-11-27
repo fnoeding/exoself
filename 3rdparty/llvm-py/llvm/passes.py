@@ -1,3 +1,33 @@
+# 
+# Copyright (c) 2008, Mahadevan R All rights reserved.
+# 
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+# 
+#  * Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
+# 
+#  * Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+# 
+#  * Neither the name of this software, nor the names of its 
+#    contributors may be used to endorse or promote products derived from
+#    this software without specific prior written permission.
+# 
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+# A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+# OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+# SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+# DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+# THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+# 
+
 """Pass managers and passes.
 
 This module provides the LLVM pass managers and the passes themselves.
@@ -26,7 +56,7 @@ PASS_DEAD_ARG_ELIMINATION       = 10
 PASS_DEAD_TYPE_ELIMINATION      = 11
 PASS_DEAD_INST_ELIMINATION      = 12
 PASS_DEAD_STORE_ELIMINATION     = 13
-PASS_GCSE                       = 14
+# PASS_GCSE                       = 14: removed in LLVM 2.4
 PASS_GLOBAL_DCE                 = 15
 PASS_GLOBAL_OPTIMIZER           = 16
 PASS_GVN                        = 17
@@ -97,7 +127,7 @@ _pass_creator = {
     PASS_DEAD_TYPE_ELIMINATION      : _core.LLVMAddDeadTypeEliminationPass,
     PASS_DEAD_INST_ELIMINATION      : _core.LLVMAddDeadInstEliminationPass,
     PASS_DEAD_STORE_ELIMINATION     : _core.LLVMAddDeadStoreEliminationPass,
-    PASS_GCSE                       : _core.LLVMAddGCSEPass,
+    # PASS_GCSE                       : _core.LLVMAddGCSEPass,: removed in LLVM 2.4.
     PASS_GLOBAL_DCE                 : _core.LLVMAddGlobalDCEPass,
     PASS_GLOBAL_OPTIMIZER           : _core.LLVMAddGlobalOptimizerPass,
     PASS_GVN                        : _core.LLVMAddGVNPass,

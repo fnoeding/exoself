@@ -1,6 +1,16 @@
 
-0.4, in progress:
+0.5, 22-Nov-2008:
 
+  * Added vicmp, vfcmp instructions and constant expressions.
+  * Builds on FreeBSD.
+  * Updated documentation.
+  * Migrate to LLVM 2.4.
+
+
+0.4, 21-Nov-2008:
+
+  * Code cleanup, added license headers.
+  * Added llvm.core.load_library_permanently() (Issue #12).
   * Fix comparison using != (Issue #11).
   * Instruction.is_terminator added.
   * Fix Builder.select (Paulo Silva).

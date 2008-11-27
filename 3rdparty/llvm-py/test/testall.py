@@ -29,10 +29,23 @@ def do_ownable():
         pass
 
 
+def do_misc():
+    print "    Testing miscellaneous functions"
+    try:
+        load_library_permanently("/usr/lib/libm.so")
+    except LLVMException:
+        pass
+    try:
+        load_library_permanently("no*such*so")
+    except LLVMException:
+        pass
+
+
 def do_llvm():
     print "  Testing module llvm"
     do_llvmexception()
     do_ownable()
+    do_misc()
 
 
 def do_module():
@@ -174,9 +187,8 @@ def do_constant():
     f.fdiv(f).frem(f).fcmp(RPRED_ULT, f)
     vi = Constant.vector([Constant.int(ti,42)]*10)
     vf = Constant.vector([Constant.real(Type.float(), 3.14)]*10)
-    # after LLVM 2.3!
-    #vi.vicmp(IPRED_ULT, vi)
-    #vf.vfcmp(RPRED_ULT, vf)
+    vi.vicmp(IPRED_ULT, vi)
+    vf.vfcmp(RPRED_ULT, vf)
     k.shl(k).lshr(k).ashr(k)
     # TODO gep
     k.trunc(Type.int(1))
@@ -338,6 +350,19 @@ def do_basicblock():
     # ^ not working yet!
 
 
+def _do_builder_mrv():
+    m = Module.new('mrv')
+    ft = Type.function(Type.array(ti, 2), [ti])
+    f = Function.new(m, ft, 'divrem')
+    blk = f.append_basic_block('b')
+    b = Builder.new(blk)
+    v = b.call(f, [Constant.int(ti, 1)])
+    v1 = b.getresult(v, 0)
+    v2 = b.getresult(v, 1)
+    b.ret_many([v1, v2])
+    #print f
+
+
 def do_builder():
     print "    Testing class Builder"
     m = Module.new('a')
@@ -352,7 +377,8 @@ def do_builder():
     blk2 = b.block
     b.ret_void()
     b.ret(Constant.int(ti, 10))
-    b.ret_many([Constant.int(ti, 10)]*10)
+    _do_builder_mrv()
+    #b.ret_many([Constant.int(ti, 10)]*10)
     b.branch(blk)
     b.cbranch(Constant.int(Type.int(1), 1), blk, blk)
     b.switch(f.args[0], blk)
@@ -403,9 +429,8 @@ def do_builder():
     b.fcmp(RPRED_ULT, fv, fv)
     vi = Constant.vector([Constant.int(ti,42)]*10)
     vf = Constant.vector([Constant.real(Type.float(), 3.14)]*10)
-    # after LLVM 2.3!
-    # b.vicmp(IPRED_ULT, vi, vi)
-    # b.vfcmp(RPRED_ULT, vf, vf)
+    b.vicmp(IPRED_ULT, vi, vi)
+    b.vfcmp(RPRED_ULT, vf, vf)
     # TODO b.getresult(v, 0)
     b.call(f, [v])
     b.select(Constant.int(Type.int(1), 1), blk, blk)
