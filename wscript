@@ -23,6 +23,8 @@ def set_options(opt):
 
 
 def configure(conf):
+	root, ign = os.path.split(conf.srcdir)
+
 	# get gcc / g++
 	conf.check_tool('gcc')
 	conf.check_tool('g++')
@@ -37,6 +39,13 @@ def configure(conf):
 
 	conf.env['CFLAGS'] = '-g -Wall'
 	conf.env['CXXFLAGS'] = '-g -Wall'
+
+	# setup 3rdparty tools
+	oldCwd = os.path.abspath(os.getcwd())
+	os.chdir(os.path.join(root, '3rdparty'))
+	os.system('./setup.sh')
+	os.chdir(oldCwd)
+	
 
 
 
