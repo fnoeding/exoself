@@ -21,3 +21,10 @@ Instead of installing llvm manually you can also try to use llvm from macports:
 sudo port install llvm
 
 
+License
+-------
+The compiler and other sources are distributed under the BSD License.
+Programs compiled using Exoself are not covered by this license and you may choose an arbitry license for them.
+The documentation of Exoself is covered by the CC-SA license: http://creativecommons.org/licenses/by-sa/3.0/
+
+
