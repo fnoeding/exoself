@@ -2,6 +2,10 @@
 README
 ======
 
+Exoself is a programming language, runtime and compiler designed and written by Florian Noeding (florian AT noeding DOT com).
+For more details see either my blog http://code2code.wordpress.com or http://exoself.de
+
+
 
 Quickstart
 ----------
