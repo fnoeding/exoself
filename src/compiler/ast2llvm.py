@@ -638,7 +638,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 				preds[tt.GREATER] = IPRED_SGT
 
 				ast.llvmValue = self._currentBuilder.icmp(preds[op], arg1.llvmValue, arg2.llvmValue)
-			elif arg1.esType.isUnsignedInteger() and arg2.esType.isUnsignedInteger():
+			elif (arg1.esType.isUnsignedInteger() and arg2.esType.isUnsignedInteger()) or (arg1.esType.isPointer() and arg2.esType.isPointer()):
 				preds = {}
 				preds[tt.LESS] = IPRED_ULT
 				preds[tt.LESSEQUAL] = IPRED_ULE
