@@ -21,7 +21,6 @@ def main() as int32
 	{
 		assert p[i] == i * i + i;
 	}
-	free(p);
 
 	p2 as float64*;
 	p2 = cast(malloc(8 * 100) as float64*);
@@ -30,9 +29,12 @@ def main() as int32
 		p2[i] = p[i] * 0.5;
 		assert p2[i] == p[i] * 0.5;
 	}
+
+	assert p2[5] + p2[5] == p[5];
+
+
 	free(p2);
-
-
+	free(p);
 
 	return 0;
 }

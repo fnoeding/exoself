@@ -7,7 +7,7 @@ def makeTest(bld, sources, destBase, dirs='.'):
 	test.source = sources
 	test.llvmTarget = destBase + '.bc'
 	test.target = destBase
-	test.unit_test = True
+	test.unitTest = {'ret': 0}
 
 
 makeTest(bld, 't001_main.es t001_mod.es', 't001')

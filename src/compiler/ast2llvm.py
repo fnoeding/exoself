@@ -201,7 +201,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 		if not block:
 			return
 
-	
+
 		entryBB = llvmRef.append_basic_block('entry')
 		bEntry = Builder.new(entryBB)
 
@@ -228,8 +228,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 				trapFunc = Function.intrinsic(self._module, INTR_TRAP, []);
 				self._currentBuilder.call(trapFunc, [])
 				self._currentBuilder.ret(Constant.int(Type.int(32), -1)) # and return, otherwise func.verify will fail
-				
-				
+
 
 		llvmRef.verify()
 
@@ -313,7 +312,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 		abortFunc = self._module.get_function_named('abort')
 		thenBuilder.call(abortFunc, [])
 		thenBuilder.branch(elseBB) # we'll never get here - but create proper structure of IR
-	
+
 		self._currentBuilder = Builder.new(elseBB)
 
 
@@ -351,7 +350,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 		# continue in mergeBB
 		self._currentBuilder = Builder.new(mergeBB)
-		
+
 
 	def _onFor(self, ast, variableName, rangeStart, rangeStop, rangeStep, block):
 
@@ -444,7 +443,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 		self._currentBuilder = Builder.new(bodyBB)
 		ast.breakTarget = mergeBB
 		ast.continueTarget = headBB
-		
+
 		self._dispatch(block)
 
 		self._currentBuilder.branch(headBB)
@@ -475,7 +474,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 		assert(target and 'type checker should make sure that there is a break target')
 
 		self._currentBuilder.branch(target)
-		
+
 
 	def _onPass(self, ast):
 		pass
@@ -488,7 +487,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 	def _onFloatConstant(self, ast, constant):
 		# FIXME
 		value = constant.text.replace('_', '').lower()
-		
+
 		ast.llvmValue = Constant.real(ast.esType.toLLVMType(), str(value))
 
 
@@ -564,7 +563,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 			self._dispatch(x)
 			params.append(x.llvmValue)
 
-		
+
 		esFunction = ast.esFunction
 		llvmFunc = getattr(esFunction, 'llvmRef', None)
 		if not llvmFunc:
@@ -694,7 +693,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 			variableName = assigneeExpr.children[0]
 			var = self._findSymbol(fromTree=variableName, type_=ESVariable)
 			self._simpleAssignment(var, expression.llvmValue)
-		elif assigneeExpr.type in (TreeType.DEREFERENCE, TreeType.MEMBERACCESS):
+		elif assigneeExpr.type == TreeType.DEREFERENCE:
 			self._dispatch(assigneeExpr)
 
 			#variableName = assigneeExpr.children[0]
@@ -838,11 +837,6 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 	def _onDereference(self, ast, expression, indexExpression):
 		self._dispatch(expression)
-		if indexExpression:
-			self._dispatch(indexExpression)
-			idx = [indexExpression.llvmValue]
-		else:
-			idx = [Constant.int(Type.int(32), 0)]
 
 		# we have a problem: The derefencing is ambiguous
 		# either we want to load a value from memory --> we need ast.llvmValue
@@ -851,12 +845,33 @@ class ModuleTranslator(astwalker.ASTWalker):
 		# so the optimizer will remove it
 		# for now stay stay with the inefficient code...
 
+		esType = expression.esType
+		if esType.isPointer():
+			if indexExpression:
+				self._dispatch(indexExpression)
+				idx = [indexExpression.llvmValue]
+			else:
+				idx = [Constant.int(Type.int(32), 0)]
+
+			toDeref = expression.llvmValue
+		elif esType.isStruct():
+			if indexExpression.type == TreeType.NAME:
+				memberIdx = esType.getStructMemberIndexByName(indexExpression.text)
+				idx = [Constant.int(Type.int(32), 0), Constant.int(Type.int(32), memberIdx)]
+			else:
+				raise NotImplementedError('TODO')
+
+			toDeref = expression.llvmRef
+		else:
+			assert(0 and 'dead code path')
+
 		# every variable is an alloca --> first get the real memory address
-		realAddrWithOffset = self._currentBuilder.gep(expression.llvmValue, idx)
+		realAddrWithOffset = self._currentBuilder.gep(toDeref, idx)
 		ast.llvmRef = realAddrWithOffset
 
 		# now load data from it
 		ast.llvmValue = self._currentBuilder.load(realAddrWithOffset)
+
 
 
 	def _onAlias(self, ast, name, typeName):
@@ -892,25 +907,6 @@ class ModuleTranslator(astwalker.ASTWalker):
 		pass
 
 
-	def _onMemberAccess(self, ast, expression, name):
-		self._dispatch(expression)
-
-		if expression.esType.isStruct():
-			llvmRef = expression.llvmRef
-
-			memberIdx = expression.esType.getStructMemberIndexByName(name.text)
-			idx = [Constant.int(Type.int(32), 0), Constant.int(Type.int(32), memberIdx)]
-
-			realAddrWithOffset = self._currentBuilder.gep(llvmRef, idx)
-
-			ast.llvmRef = realAddrWithOffset
-			ast.llvmValue = self._currentBuilder.load(realAddrWithOffset)
-		else:
-			assert(0 and 'dead code path')
-
-
-
-
 
 
 	def walkAST(self, ast, absFilename, sourcecode=''):
@@ -926,7 +922,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 
 
-	
+
 
 def run(module, function):
 	mp = ModuleProvider.new(module)

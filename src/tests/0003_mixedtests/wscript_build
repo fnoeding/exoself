@@ -8,5 +8,5 @@ for x in l:
 	test.source = base + '.es'
 	test.llvmTarget = base + '.bc'
 	test.target = base
-	test.unit_test = True
+	test.unitTest = {'ret': 0}
 	

@@ -318,10 +318,6 @@ class ASTWalker(object):
 				varTypes.append(ast.children[1 + 2 * i + 1])
 			kwargs['varNames'] = varNames
 			kwargs['varTypes'] = varTypes
-		elif t == tt.MEMBERACCESS:
-			callee = self._onMemberAccess
-			kwargs['expression'] = ast.children[0]
-			kwargs['name'] = ast.children[1]
 		else:
 			print t
 			assert(0 and 'dead code path / support for new token type not implemented')
@@ -372,6 +368,7 @@ class ASTWalker(object):
 
 
 		return '\n'.join(s) + '\n'
+
 
 	def _raiseException(self, exType, line=None, tree=None, numContextLines=5, preText='error:', postText='', inlineText=''):
 		if line:

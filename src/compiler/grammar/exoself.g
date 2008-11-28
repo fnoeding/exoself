@@ -121,7 +121,6 @@ tokens {
 	DEREFERENCE;
 	FUNCTIONOPERATOR;
 	ADDRESSOF;
-	MEMBERACCESS;
 }
 
 
@@ -278,8 +277,8 @@ term: factor ((STAR^ | SLASH^ | PERCENT^) factor)*;
 factor:
 	PLUS^ factor
 	| MINUS^ factor
-	| STAR factor -> ^(DEREFERENCE factor)
-	| DOUBLESTAR factor -> ^(DEREFERENCE ^(DEREFERENCE factor))
+	| a=STAR factor -> ^(DEREFERENCE[$a] factor ^(INTEGER_CONSTANT INTEGER['0']))
+	| a=DOUBLESTAR factor -> ^(DEREFERENCE[$a] factor ^(INTEGER_CONSTANT INTEGER['0']) ^(INTEGER_CONSTANT INTEGER['0']))
 	| AMPERSAND factor -> ^(ADDRESSOF factor)
 	| power;
 
@@ -290,9 +289,13 @@ array_subscript:
 	function_operator
 	(
 		/* nothing */ -> function_operator
-		| (LBRACKET expr RBRACKET)+ -> ^(DEREFERENCE function_operator expr+) // this get's desugared: x[5][1] becomes (DEREFERENCE (DEREFERENCE 5), 1) etc.
-		| (DOT NAME)+ -> ^(MEMBERACCESS function_operator NAME+)
+		|
+		( // this get's desugared: x[5][1] becomes (DEREFERENCE (DEREFERENCE 5), 1) etc.
+			(LBRACKET a+=expr RBRACKET) | (DOT a+=array_subscript_helper) 
+		)+ -> ^(DEREFERENCE function_operator $a+)
 	);
+array_subscript_helper: NAME;
+
 
 
 function_operator:
@@ -301,7 +304,6 @@ function_operator:
 		/* nothing */ -> $a
 		| (n+=NAME a+=atom)+ -> ^(FUNCTIONOPERATOR $n+ $a+)// gets desugared to ordinary callfunc nodes
 	);
-//	(a=atom->$a) (NAME b=atom -> ^(CALLFUNC NAME $a $b))*;
 
 
 atom: LPAREN expr RPAREN -> expr

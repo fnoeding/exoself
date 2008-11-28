@@ -171,6 +171,14 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			if x.type in [TreeType.IMPORTALL]:
 				self._dispatch(x)
 
+
+		############################################
+		# get global structs
+		############################################
+		for x in statements:
+			if x.type == TreeType.STRUCT:
+				self._dispatch(x)
+
 		############################################
 		# get global variables and functions
 		############################################
@@ -185,7 +193,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		# annotate the whole tree
 		############################################
 		for x in statements:
-			if x.type in [TreeType.IMPORTALL]:
+			if x.type in [TreeType.IMPORTALL, TreeType.STRUCT]:
 				# already done
 				continue
 
@@ -652,7 +660,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			else:
 				if not var.esType.isEquivalentTo(esType, False):
 					self._insertImplicitCastNode(exprNode, var.esType)
-		elif assigneeExpr.type in (TreeType.DEREFERENCE, TreeType.MEMBERACCESS):
+		elif assigneeExpr.type == TreeType.DEREFERENCE:
 			self._dispatch(assigneeExpr)
 
 			if not assigneeExpr.esType.isEquivalentTo(esType, False):
@@ -784,15 +792,27 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 	def _onDereference(self, ast, expression, indexExpression):
 		self._dispatch(expression)
-		if indexExpression:
-			self._dispatch(indexExpression)
 
 		esType = expression.esType
-		if not esType.isPointer():
-			self._raiseException(RecoverableCompileError, tree=expression, inlineText='can only dereference pointers')
+		if esType.isPointer():
+			if indexExpression:
+				self._dispatch(indexExpression)
+			ast.esType = esType.dereference()
+		elif esType.isStruct:
+			if indexExpression.type == TreeType.NAME:
+				m = esType.getStructMemberTypeByName(indexExpression.text)
+				if not m:
+					self._raiseException(RecoverableCompileError, tree=indexExpression, inlineTExt='struct has no such member')
+				ast.esType = m
+			else:
+				raise NotImplementedError('TODO')
+		else:
+			raise NotImplementedError('FIXME')
+
+		#	if not esType.isPointer():
+		#	self._raiseException(RecoverableCompileError, tree=expression, inlineText='can only dereference pointers')
 
 
-		ast.esType = esType.dereference()
 
 
 	def _onAlias(self, ast, name, typeName):
@@ -844,20 +864,6 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		structType = ESType.createStruct(name.text, esTypes, names) # FIXME use a name derived from name, module name and package name!
 
 		self._addSymbol(fromTree=name, symbol=structType)
-
-
-
-	def _onMemberAccess(self, ast, expression, name):
-		self._dispatch(expression)
-
-		esType = expression.esType
-		if esType.isStruct():
-			m = esType.getStructMemberTypeByName(name.text)
-			if not m:
-				self._raiseException(RecoverableCompileError, tree=name, inlineText='struct has no such member')
-			ast.esType = m
-		else:
-			self._raiseException(RecoverableCompileError, tree=ast, inlineText='can not use member access on this expression')
 
 
 

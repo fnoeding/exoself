@@ -9,16 +9,20 @@ for x in l:
 	test.source = base + '.es'
 	test.llvmTarget = base + '.bc'
 	test.target = base
-	test.unit_test = True
 
+	ut = {'ret': 0}
 	if (base + '.ret') in lRet:
 		p = os.path.join(bld.path.abspath(), base + '.ret')
 
 		# someone overwrote 'file'...
 		f = file.__class__(p, 'rt')
-		test.expected_ret_code = int(f.read()) & 0xFF
-		if test.expected_ret_code < 0:
-			test.expected_ret_code = 256 - abs(test.expected_ret_code)
+		r = int(f.read()) & 0xFF
 		f.close()
 		del f
+
+		if r < 0:
+			r = 256 - abs(r)
+
+		ut['ret'] = r
 	
+	test.unitTest = ut

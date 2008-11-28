@@ -3,6 +3,7 @@
 
 from TaskGen import *
 import Utils
+import os
 
 
 def detect(conf):
@@ -23,6 +24,44 @@ Task.simple_task_type('exoself', '${EXOSELF} ${EXOSELF_OPTIONS} -c -o ${TGT} ${S
 Task.simple_task_type('llvm-link', '${LLVM_LINK} -f -o ${TGT} ${SRC}')
 Task.simple_task_type('llvm-llc', '${LLVM_LLC} -f -o ${TGT} ${SRC}')
 Task.simple_task_type('llvm-native-compile', '${LLVM_NATIVE_C} -c -o ${TGT} ${SRC}')
+
+
+
+class ExoselfUnitTest(Task.Task):
+	def __init__(self, *k, **kw):
+		self.unitTestParams = kw['unitTestParams']
+		Task.Task.__init__(self, *k, **kw)
+		self.color = 'CYAN'
+
+
+	def runnable_status(self):
+		for t in self.run_after:
+			if not t.hasrun:
+				return ASK_LATER
+
+		return RUN_ME
+
+	def run(self):
+		assert(len(self.inputs) == 1)
+
+
+		bld = self.generator.bld
+		path = self.inputs[0].bldpath(self.env)
+
+		status = bld.exec_command('lli %s > /dev/null 2> /dev/null' % path) # TODO lli configureable
+
+
+		self.hasrun = 1
+
+
+		utp = self.unitTestParams
+		if status >= 0 and status == utp['ret']:
+			return 0
+		else:
+			return 1
+
+
+
 
 
 
@@ -100,6 +139,20 @@ def apply_source(self):
 		self.llvmCombinedObject = self.llvmObjects[0] # FIXME ignores llvmTarget
 		linkTask = compileTasks[0]
 
+	# implement unit testing here
+	unitTest = getattr(self, 'unitTest', False)
+	if unitTest:
+		if type(unitTest) != dict:
+			unitTest = {}
+			unitTest['ret'] = 0
+
+
+		ut = ExoselfUnitTest(self.env, generator=self, unitTestParams=unitTest)
+		ut.set_inputs(self.llvmCombinedObject)
+		ut.set_run_after(linkTask)
+	else:
+		ut = linkTask # for set_run_after below
+
 
 	# compile to native
 	target = getattr(self, 'target', None)
@@ -110,7 +163,7 @@ def apply_source(self):
 		compileTask.set_inputs(self.llvmCombinedObject)
 		targetNode = self.path.find_or_declare(self.target).change_ext('.s')
 		compileTask.set_outputs(targetNode)
-		compileTask.set_run_after(linkTask)
+		compileTask.set_run_after(ut)
 
 		self.nativeAssembly = targetNode
 
@@ -152,13 +205,13 @@ def apply_source(self):
 				packageNode = packageObj.path
 				packageDir = packageNode.relpath_gen(self.path)
 
-				
+
 				for task in packageObj.tasks:
 					found = False
 					for output in task.outputs:
 						if output.name == 'lib%s.so' % packageName: # FIXME
 							found = True
-							
+
 							p, ign = os.path.split(output.bldpath(self.env))
 							if not p in libPaths:
 								libPaths.append(p)
@@ -192,7 +245,7 @@ def apply_source(self):
 		nativeLinkTask.set_run_after(nativeCompileTask)
 
 		self.nativeProgram = targetNode
-	
+
 
 
 
