@@ -648,6 +648,12 @@ class ModuleTranslator(astwalker.ASTWalker):
 				preds[tt.GREATER] = IPRED_UGT
 
 				ast.llvmValue = self._currentBuilder.icmp(preds[op], arg1.llvmValue, arg2.llvmValue)
+			elif arg1.esType.isBoolean() and arg2.esType.isBoolean():
+				preds = {}
+				preds[tt.EQUAL] = IPRED_EQ
+				preds[tt.NOTEQUAL] = IPRED_NE
+
+				ast.llvmValue = self._currentBuilder.icmp(preds[op], arg1.llvmValue, arg2.llvmValue)
 			elif arg1.esType.isFloatingPoint() and arg2.esType.isFloatingPoint():
 				# TODO think about ordered and unordered comparisions...
 				# for now ordered
@@ -907,6 +913,13 @@ class ModuleTranslator(astwalker.ASTWalker):
 		pass
 
 
+	def _onNoneConstant(self, ast):
+		ast.llvmValue = Constant.null(Type.pointer(Type.int(8)))
+
+
+
+	def _onBooleanConstant(self, ast, value):
+		ast.llvmValue = Constant.int(Type.int(1), value)
 
 
 	def walkAST(self, ast, absFilename, sourcecode=''):

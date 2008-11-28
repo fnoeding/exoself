@@ -49,6 +49,7 @@ elementaryTypes[u'sword'] = elementaryTypes[u'int64'] #.deriveTypedef('sword')
 
 
 
+
 implicitConversions = {}
 def _buildImplicitConversionsTable():
 	# float32 has 23 bits mantissa --> information loss with int32, int64
@@ -132,6 +133,10 @@ def canImplicitlyCast(fromType, toType):
 
 	# any pointer can be implicitly cast to void*
 	if fromType.isPointer and toType.isEquivalentTo(elementaryTypes[u'void'].derivePointer(), False):
+		return True
+
+	if toType.isPointer() and fromType.payload == ('elementary', 'none'):
+		# None can be implicitly cast to any pointer type
 		return True
 
 	if not fromType in implicitConversions:

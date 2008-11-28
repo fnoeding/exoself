@@ -68,7 +68,7 @@ class ASTWalker(object):
 
 			packageName = None
 			moduleName = None
-			
+
 			n = len(ast.children)
 			idx = 0
 			for i in range(n):
@@ -263,7 +263,7 @@ class ASTWalker(object):
 				v2 = ast.children[1]
 			else:
 				assert(0 and 'dead code path')
-			
+
 			kwargs['op'] = op
 			kwargs['arg1'] = v1
 			kwargs['arg2'] = v2
@@ -310,7 +310,7 @@ class ASTWalker(object):
 		elif t == tt.STRUCT:
 			callee = self._onDefStruct
 			kwargs['name'] = ast.children[0]
-			
+
 			varNames = []
 			varTypes = []
 			for i in range((len(ast.children) - 1) / 2):
@@ -318,6 +318,13 @@ class ASTWalker(object):
 				varTypes.append(ast.children[1 + 2 * i + 1])
 			kwargs['varNames'] = varNames
 			kwargs['varTypes'] = varTypes
+		elif t == tt.NONE_CONSTANT:
+			callee = self._onNoneConstant
+		elif t == tt.BOOLEAN_CONSTANT:
+			callee = self._onBooleanConstant
+
+			value = ast.children[0].type == TreeType.TRUE
+			kwargs['value'] = value
 		else:
 			print t
 			assert(0 and 'dead code path / support for new token type not implemented')
@@ -379,7 +386,7 @@ class ASTWalker(object):
 			s = self._generateContext(preText=preText, postText=postText, inlineText=inlineText)
 
 		raise exType(s)
-		
+
 
 	def _findSymbolHelper(self, name):
 		# start at current symbol table, then walk all AST nodes containing symbol tables until root node. Stop search when something was found

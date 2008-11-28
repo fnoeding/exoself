@@ -889,6 +889,14 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		structType.parents = t.parents
 
 
+	def _onNoneConstant(self, ast):
+		ast.esType = ESType.createNone()
+
+
+	def _onBooleanConstant(self, ast, value):
+		ast.esType = self._findSymbol(name=u'bool', type_=ESType)
+
+
 
 
 

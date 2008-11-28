@@ -13,16 +13,14 @@ struct LL
 
 def appendNode(head as LL*, data as int32) as void
 {
-	null as LL*;// FIXME replace with a Null / None keyword to circumvent type checking
-
 	p = head;
-	while p[0].next != null
+	while (p[0].next != None) == True
 	{
 		p = p[0].next;
 	}
 
 	n = new(LL);
-	n[0].next = null;
+	n[0].next = None;
 	n[0].data = data;
 
 	p[0].next = n;
@@ -31,12 +29,10 @@ def appendNode(head as LL*, data as int32) as void
 
 def getNodeAtIndex(head as LL*, idx as int32) as LL*
 {
-	null as LL*;// FIXME
-
 	i = 0;
 	
 	p = head;
-	while p != null and i < idx
+	while (p != None and i < idx) != False
 	{
 		p = p[0].next;
 		i += 1;
@@ -48,11 +44,9 @@ def getNodeAtIndex(head as LL*, idx as int32) as LL*
 
 def main() as int32
 {
-	null as LL*;// FIXME replace with a Null / None keyword to circumvent type checking
-
 	head as LL*;
 	head = new(LL);
-	head[0].next = null;
+	head[0].next = None;
 	head[0].data = 0;
 
 

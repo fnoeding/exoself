@@ -72,6 +72,9 @@ tokens {
 	NEW = 'new';
 	DELETE = 'delete';// for now only reserved
 	STRUCT = 'struct';
+	NONE = 'None';
+	TRUE = 'True';
+	FALSE = 'False';
 
 	// operators
 	SEMI = ';';
@@ -110,6 +113,8 @@ tokens {
 	INTEGER_CONSTANT;
 	FLOAT_CONSTANT;
 	STRING_CONSTANT;
+	BOOLEAN_CONSTANT;
+	NONE_CONSTANT;
 	VARIABLE;
 	CALLFUNC;
 	ASSIGNLIST;
@@ -314,6 +319,7 @@ atom: LPAREN expr RPAREN -> expr
 	| function_call
 	| cast_expression
 	| new_expression
+	| special_constant
 	;
 
 cast_expression: (CAST^ | BITCAST^) LPAREN! expr AS! type_name RPAREN!;
@@ -328,6 +334,12 @@ float_constant:
 
 string_constant:
 	STRING -> ^(STRING_CONSTANT STRING);
+
+special_constant:
+	TRUE -> ^(BOOLEAN_CONSTANT TRUE)
+	| FALSE -> ^(BOOLEAN_CONSTANT FALSE)
+	| NONE -> ^(NONE_CONSTANT)
+	;
 
 variable_name: NAME -> ^(VARIABLE NAME);
 

@@ -82,10 +82,18 @@ class ESType(object):
 		parts.extend(paramTypes)
 		return ESType(parts, ('function', len(returnTypes)))
 
+
 	@staticmethod
 	def createSelfPointer():
 		''' only valid inside structs! '''
 		return ESType([], ('selfpointer', None))
+
+
+	@staticmethod
+	def createNone():
+		# move to estypesystem? but it should not be used as a normal type, only internally...
+		return ESType([], ('elementary', 'none'))
+
 
 	@staticmethod
 	def _simplify(t):
@@ -267,7 +275,12 @@ class ESType(object):
 		while p.payload[0] == 'typedef':
 			p = p.parents[0]
 
-		return p.payload[0] == 'pointer'
+		if p.payload[0] == 'pointer':
+			return True
+		elif self.payload == ('elementary', 'none'):
+			return True
+
+		return False
 
 
 	def isStruct(self):
@@ -284,6 +297,19 @@ class ESType(object):
 			p = p.parents[0]
 
 		return p.payload[0] == 'selfpointer'
+
+	def isBoolean(self):
+		p = self
+		while p.payload[0] == 'typedef':
+			p = p.parents[0]
+
+		if p.payload[0] != 'elementary':
+			return False
+
+		if p.payload[1] != 'bool':
+			return False
+
+		return True
 
 
 	def isSignedInteger(self):
