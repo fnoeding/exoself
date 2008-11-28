@@ -770,13 +770,30 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 
 	def _onTypeName(self, ast):
+		def insideStructDef(self):
+			sdn = None
+			for n in reversed(self._nodes):
+				if n.type == TreeType.STRUCT:
+					sdn = n
+					break
+			return sdn
+
+
 		n = len(ast.children)
 		if n == 1:
 			ast.esType = self._findSymbol(fromTree=ast.children[0], type_=ESType)
+
+			if ast.esType.isStruct() and not ast.esType.parents:
+				assert(insideStructDef(self))
+				self._raiseException(RecoverableCompileError, fromTree=ast, inlineText='structs can not contain themself. Use a pointer')
 		else:
 			# later we could implement here const / invariant etc.
 			# but now just look up name
 			baseType = self._findSymbol(fromTree=ast.children[0], type_=ESType)
+
+			if baseType.isStruct() and not baseType.parents:
+				assert(insideStructDef(self))
+				baseType = ESType.createSelfPointer()
 
 			# no nesting allowed for now!
 			if ast.children[1].type not in [TreeType.STAR, TreeType.DOUBLESTAR]:
@@ -796,6 +813,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		esType = expression.esType
 		if esType.isPointer():
 			if indexExpression:
+				# TODO make sure it is an index expression and not a name
 				self._dispatch(indexExpression)
 			ast.esType = esType.dereference()
 		elif esType.isStruct:
@@ -851,6 +869,10 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 
 	def _onDefStruct(self, ast, name, varNames, varTypes):
+		# since structs can refer to them selves using pointers we have to add this type right now
+		structType = ESType.createStruct(name.text, [], [])
+		self._addSymbol(fromTree=name, symbol=structType)
+
 		esTypes = []
 		names = []
 		for i in range(len(varTypes)):
@@ -859,11 +881,13 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 			names.append(varNames[i].text)
 
-		# TODO check for duplicate names
+		# TODO check for duplicate names in varNames
 
-		structType = ESType.createStruct(name.text, esTypes, names) # FIXME use a name derived from name, module name and package name!
+		# add members
+		t = ESType.createStruct(name.text, esTypes, names)
+		structType.payload = t.payload
+		structType.parents = t.parents
 
-		self._addSymbol(fromTree=name, symbol=structType)
 
 
 

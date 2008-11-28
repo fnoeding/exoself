@@ -180,22 +180,32 @@ class ESType(object):
 		if self.payload[0] == 'struct':
 			llvmTypes = []
 			opaques = []
-			for p in self.parents:
+			for i, p in enumerate(self.parents):
 				# special case: self pointer --> opaque type
-				if p.payload[0] == 'selfpointer':
-					t = Type.opaque()
-					opaques.append(t)
+				if p._isSelfPointer():
+					th = TypeHandle.new(Type.opaque())
+					opaques.append(th)
+
+					t = th.type
+					while p.payload[0] == 'pointer':
+						t = Type.pointer(t)
+
+						assert(len(p.parents) == 1)
+						p = p.parents[0]
+
 					llvmTypes.append(t)
 				else:
 					llvmTypes.append(p.toLLVMType())
 
 			s = Type.struct(llvmTypes)
 
-			# refine types
-			for t in opaques:
-				t.refine(Type.pointer(s))
+			for th in opaques:
+				th.type.refine(s)
 
-			return s
+			if not opaques:
+				return s
+			else:
+				return th.type
 
 		elif self.payload[0] == 'function':
 			llvmTypes = []
@@ -268,6 +278,14 @@ class ESType(object):
 		return p.payload[0] == 'struct'
 
 
+	def _isSelfPointer(self):
+		p = self
+		while p.payload[0] == 'pointer':
+			p = p.parents[0]
+
+		return p.payload[0] == 'selfpointer'
+
+
 	def isSignedInteger(self):
 		p = self
 		while p.payload[0] == 'typedef':
@@ -333,7 +351,19 @@ class ESType(object):
 		for i in range(len(self.parents)):
 			name = self.payload[2][i]
 			type_ = self.parents[i]
-			m.append(name, type_)
+
+			if type_._isSelfPointer():
+				# replace selfpointer with real type
+				type_ = self
+
+				p = self.parents[i]
+				while p.payload[0] == 'pointer':
+					type_ = type_.derivePointer()
+
+					assert(len(p.parents) == 1)
+					p = p.parents[0]
+
+			m.append((name, type_))
 
 		return m
 
@@ -341,11 +371,12 @@ class ESType(object):
 	def getStructMemberTypeByName(self, name):
 		assert(self.isStruct())
 
-		for i in range(len(self.parents)):
-			if name == self.payload[2][i]:
-				return self.parents[i]
+		try:
+			idx = self.getStructMemberIndexByName(name)
+		except AssertionError:
+			return None
 
-		return None
+		return self.getStructMembers()[idx][1]
 
 
 	def getStructMemberIndexByName(self, name):
@@ -390,6 +421,8 @@ class ESType(object):
 			s = self.parents[0]._mangleNameDefault()
 
 			return 'P' + s
+		elif self.payload[0] == 'struct':
+			return 'S%d%s' % (len(self.payload[1]), self.payload[1])
 		else:
 			raise NotImplementedError('TODO')
 
