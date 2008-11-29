@@ -221,8 +221,22 @@ class ASTWalker(object):
 			kwargs['suffix'] = suffix
 		elif t == tt.FLOAT_CONSTANT:
 			callee = self._onFloatConstant
-			# TODO unpack value; see INTEGER_CONSTANT
-			kwargs['constant'] = ast.children[0]
+
+			value = ast.children[0].text.replace('_', '')
+			suffix = []
+			for x in reversed(value):
+				if x.lower() in '0123456789eE':
+					break
+
+				suffix.insert(0, x)
+			suffix = u''.join(suffix)
+
+			if suffix:
+				value = value[:-len(suffix)]
+			value = value.lower()
+
+			kwargs['value'] = value # should be a string
+			kwargs['suffix'] = suffix
 		elif t == tt.STRING_CONSTANT:
 			callee = self._onStringConstant
 			# TODO unpack value; see INTEGER_CONSTANT

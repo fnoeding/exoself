@@ -484,10 +484,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 
 
-	def _onFloatConstant(self, ast, constant):
-		# FIXME
-		value = constant.text.replace('_', '').lower()
-
+	def _onFloatConstant(self, ast, value, suffix):
 		ast.llvmValue = Constant.real(ast.esType.toLLVMType(), str(value))
 
 

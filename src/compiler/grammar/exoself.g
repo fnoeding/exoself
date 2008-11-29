@@ -154,11 +154,16 @@ fragment IntegerSuffix:
 	| 'l' // int64
 	;
 
+fragment FloatSuffix:
+	'f' // float32
+	// float64 has no suffix
+	;
+
 fragment RawString: 'r' '"' (~('"'))* '"';
 
 STRING: (Letter)* RawString;// any arbitrary prefix ending with r will result in a raw string...; FIXME
 INTEGER: (SpacedDigit | ('0x' | '0X') SpacedHexDigit | ('0b' | '0B') SpacedBinaryDigit) IntegerSuffix?;// octal integers are also matched by SpacedDigit
-FLOAT: Float;// TODO HexFloat for exact representation
+FLOAT: Float FloatSuffix?;// TODO HexFloat for exact representation
 NAME: (Letter | '_') (Letter | Digit | '_')*;
 
 // whitespace, comments

@@ -433,12 +433,15 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		elif suffix == 'hh':
 			if bits > 8:
 				self._raiseException(RecoverableCompileError, tree=ast, inlineText='constant can not be represented in the requested type')
+			bits = 8
 		elif suffix == 'h':
 			if bits > 16:
 				self._raiseException(RecoverableCompileError, tree=ast, inlineText='constant can not be represented in the requested type')
+			bits = 16
 		elif suffix == 'l':
 			if bits > 64:
 				self._raiseException(RecoverableCompileError, tree=ast, inlineText='constant can not be represented in the requested type')
+			bits = 64
 		else:
 			self._raiseException(RecoverableCompileError, tree=ast, inlineText='unknown integer suffix')
 
@@ -450,9 +453,11 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			ast.esType = self._findSymbol(name=u'uint%d' % bits, type_=ESType)
 
 
-	def _onFloatConstant(self, ast, constant):
-		# FIXME
-		ast.esType = self._findSymbol(name=u'float64', type_=ESType)
+	def _onFloatConstant(self, ast, value, suffix):
+		if suffix and suffix[0] == 'f':
+			ast.esType = self._findSymbol(name=u'float32', type_=ESType)
+		else:
+			ast.esType = self._findSymbol(name=u'float64', type_=ESType)
 
 
 	def _onStringConstant(self, ast, constant):
@@ -573,17 +578,78 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			self._dispatch(x)
 
 		esFunctions = self._findSymbol(fromTree=calleeName, type_=ESFunction)
+		if not esFunctions:
+			self._raiseException(RecoverableCompileError, tree=calleeName, inlineText='no function with this name found')
 
-		# TODO find best matching function for parameters
-		# for now simply match argument count
-		callee = None
-		for f in esFunctions:
-			if len(f.esType.getFunctionParameterTypes()) == len(expressions):
-				callee = f
-				break
+		# functions may be overloaded, so determine the right one to call
 
+		# TODO move to esTypes? somewhere else? make it more readable!
+		def getMatchingFunctions(functions, paramTypes):
+			nParams = len(paramTypes)
+
+			# get all functions with matching argument count
+			good = []
+			for f in esFunctions:
+				if len(f.esType.getFunctionParameterTypes()) == len(expressions):
+					good.append(f)
+
+			if not good:
+				# TODO provide a better error message
+				self._raiseException(RecoverableCompileError, tree=calleeName, inlineText='no function with the right number of arguments found')
+
+
+			# try to find perfect match --> no implicit conversions needed
+			perfectMatch = None
+			for f in good:
+				bad = False
+				ptypes = f.esType.getFunctionParameterTypes()
+				for i, t in enumerate(ptypes):
+					if not t.isEquivalentTo(expressions[i].esType, False):
+						bad = True
+						break
+
+				if not bad:
+					return [f]
+
+			# sort out functions which are definitely wrong --> at least one parameter does not fit and there's no implicit cast
+			tmp = good
+			good = []
+			for f in tmp:
+				ptypes = f.esType.getFunctionParameterTypes()
+				bad = False
+				for i, t in enumerate(ptypes):
+					if not estypesystem.canImplicitlyCast(expressions[i].esType, t):
+						bad = True
+						break
+				if not bad:
+					good.append(f)
+
+			# find best match(es)
+
+
+			return good
+
+
+		callees = getMatchingFunctions(esFunctions, [x.esType for x in expressions])
+		if not callees:
+			# TODO provide a better error message
+			self._raiseException(RecoverableCompileError, tree=calleeName, inlineText='no function with matching arguments found')
+
+		if len(callees) > 1:
+			# TODO provide a better error message
+			s1 = 'function call is ambigous'
+			s2 = ['matches:']
+			for x in callees:
+				s2.append(str(x))
+			s2 = '\n'.join(s2)
+			self._raiseException(RecoverableCompileError, tree=calleeName, inlineText=s1, postText=s2)
+
+
+		callee = callees[0]
 		if not callee:
 			self._raiseException(RecoverableCompileError, tree=calleeName, inlineText='no matching function found')
+
+
 
 		# convert parameters
 		paramTypes = callee.esType.getFunctionParameterTypes()

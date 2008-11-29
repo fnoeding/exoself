@@ -26,10 +26,10 @@ def h(x as int8) as int8
 
 def main() as int32
 {
-	assert g(118) == 128;
-	assert h(126) == 127;
-	assert h(127) == -128;
+	assert g(118hh) == 128;
+	assert h(126hh) == 127;
+	assert h(127hh) == -128;
 
-	return f(5) - 500;
+	return f(5hh) - 500;
 }
 
