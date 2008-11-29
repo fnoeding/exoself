@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 l = bld.glob('*.es')
+lRet = bld.glob('*.ret')
 for x in l:
 	base = x[:-3]
 
@@ -8,5 +9,20 @@ for x in l:
 	test.source = base + '.es'
 	test.llvmTarget = base + '.bc'
 	test.target = base
-	test.unitTest = {'ret': 0}
+
+	ut = {'ret': 0}
+	if (base + '.ret') in lRet:
+		p = os.path.join(bld.path.abspath(), base + '.ret')
+
+		# someone overwrote 'file'...
+		f = file.__class__(p, 'rt')
+		r = int(f.read()) & 0xFF
+		f.close()
+		del f
+
+		if r < 0:
+			r = 256 - abs(r)
+
+		ut['ret'] = r
 	
+	test.unitTest = ut
