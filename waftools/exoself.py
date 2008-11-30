@@ -20,7 +20,7 @@ def detect(conf):
 
 
 
-Task.simple_task_type('exoself', '${EXOSELF} ${EXOSELF_OPTIONS} -c -o ${TGT} ${SRC}', color='BLUE')
+esTask = Task.simple_task_type('exoself', '${EXOSELF} ${EXOSELF_OPTIONS} -c -o ${TGT} ${SRC}', color='BLUE')
 Task.simple_task_type('llvm-link', '${LLVM_LINK} -f -o ${TGT} ${SRC}')
 Task.simple_task_type('llvm-llc', '${LLVM_LLC} -f -o ${TGT} ${SRC}')
 Task.simple_task_type('llvm-native-compile', '${LLVM_NATIVE_C} -c -o ${TGT} ${SRC}')
@@ -40,6 +40,7 @@ class ExoselfUnitTest(Task.Task):
 				return ASK_LATER
 
 		return RUN_ME
+
 
 	def run(self):
 		assert(len(self.inputs) == 1)
@@ -74,8 +75,57 @@ class es_taskgen(task_gen):
 @taskgen
 @feature('es')
 def init_es(self):
+	debug('exoself: init_es')
+
 	# TODO check source, target, ...
 	self.features = ['program'] # FIXME
+
+	#print type(self.inputs)
+	self.inputs = ()
+
+
+def scan(self):
+	# find implicit dependencies --> import statement
+	debug('exoself: scan')
+
+	nodes = []
+	names = []
+	seen = []
+
+	assert(len(self.inputs) == 1)
+	node = self.inputs[0]
+	nodePath = os.path.abspath(node.srcpath(self.env))
+	parentNode = node.parent
+
+	absParentPath = os.path.abspath(parentNode.srcpath(self.env))
+
+
+	cmd = '%s --save-dependencies - %s' % (self.env['EXOSELF'], nodePath)
+	dependencies = Utils.cmd_output(cmd, silent=True)
+	for dep in dependencies.split():
+		if dep in seen:
+			continue
+		seen.append(dep)
+
+		# TODO handle search paths
+		#for incpath in self.env['EXOSELF_SEARCHPATH']:
+		#	pass
+
+		# FIXME right now works only if the dependency is in the same directory as the original file...
+		depNode = None
+		if dep.startswith(absParentPath):
+			dep = dep[len(absParentPath):]
+			depNode = parentNode.find_resource(dep)
+
+		if not depNode:
+			names.append(dep)
+		else:
+			nodes.append(depNode)
+
+
+	return (nodes, names)
+esTask.scan = scan
+
 
 
 
@@ -84,6 +134,8 @@ def init_es(self):
 @after('init_es')
 @feature('es')
 def apply_source(self):
+	debug('exoself: apply_source')
+
 	self.llvmObjects = []
 
 	searchDirs = [self.path]
