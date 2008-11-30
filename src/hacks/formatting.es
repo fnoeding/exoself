@@ -34,3 +34,35 @@ def(mangling=C) formatInt32(buffer as byte*, size as word, format as byte*, v as
 def(mangling=C) formatInt64(buffer as byte*, size as word, format as byte*, v as int64) as void;
 def(mangling=C) formatUInt32(buffer as byte*, size as word, format as byte*, v as uint32) as void;
 def(mangling=C) formatUInt64(buffer as byte*, size as word, format as byte*, v as uint64) as void;
+
+def format(buffer as byte*, size as word, format_ as byte*, v as float32) as void
+{
+	formatFloat32(buffer, size, format_, v);
+}
+
+def format(buffer as byte*, size as word, format_ as byte*, v as float64) as void
+{
+	formatFloat64(buffer, size, format_, v);
+}
+
+def format(buffer as byte*, size as word, format_ as byte*, v as int32) as void
+{
+	formatInt32(buffer, size, format_, v);
+}
+
+def format(buffer as byte*, size as word, format_ as byte*, v as int64) as void
+{
+	formatInt64(buffer, size, format_, v);
+}
+
+def format(buffer as byte*, size as word, format_ as byte*, v as uint32) as void
+{
+	formatUInt32(buffer, size, format_, v);
+}
+
+def format(buffer as byte*, size as word, format_ as byte*, v as uint64) as void
+{
+	formatUInt64(buffer, size, format_, v);
+}
+
+

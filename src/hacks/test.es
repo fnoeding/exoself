@@ -19,7 +19,8 @@ def main() as int32
 	formatInt32(p, 1024u, ar"%d", f());
 	puts(p);
 
-	
+	format(p, 1024ul, ar"now using format instead of formatInt32: %d", f());
+	puts(p);
 
 	return 0;
 }

@@ -431,7 +431,7 @@ class ESType(object):
 			return self.payload[1]
 		elif self.payload[0] == 'function':
 			nRets = self.payload[1]
-			
+
 			rets = [x._mangleNameDefault() for x in self.parents[:nRets]]
 			params = [x._mangleNameDefault() for x in self.parents[nRets:]]
 
@@ -449,6 +449,8 @@ class ESType(object):
 			return 'P' + s
 		elif self.payload[0] == 'struct':
 			return 'S%d%s' % (len(self.payload[1]), self.payload[1])
+		elif self.payload[0] == 'typedef':
+			return 'T%d%s' % (len(self.payload[1]), self.payload[1])
 		else:
 			raise NotImplementedError('TODO')
 

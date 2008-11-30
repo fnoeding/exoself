@@ -17,13 +17,13 @@ def build(bld):
 
 
 	test = bld.new_task_gen('es')
-	test.source = 'test.es test2.es'
+	test.source = 'test.es test2.es formatting.es'
 	test.llvmTarget = 'hackstest.bc'
 	test.target = 'hackstest'
 	test.uselib_local = 'hacks'
 
 
 
-	
+
 
 
