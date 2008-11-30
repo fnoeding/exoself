@@ -51,7 +51,7 @@ def configure(conf):
 		# failed...
 		raise Utils.WafError('could not setup 3rd party modules')
 	os.chdir(oldCwd)
-	
+
 
 
 
@@ -62,8 +62,6 @@ def build(bld):
 
 
 def shutdown():
-	from waftools import myunittest
-	ut = myunittest.my_unit_test()
-	ut.change_to_testfile_dir = True
-	ut.run()
-	ut.print_results()
+	pass
+
+
