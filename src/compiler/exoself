@@ -178,10 +178,15 @@ def main():
 		f.close()
 
 	if options.saveDependencies:
-		f = file(options.saveDependencies, 'wt')
-		for x in ast.dependencies:
-			f.write('%s\n' % x)
-		f.close()
+		s = '\n'.join(ast.dependencies)
+
+		if options.saveDependencies != '-':
+			f = file(options.saveDependencies, 'wt')
+			f.write(s)
+			f.close()
+		else:
+			print s
+		return 0 # don't generate code
 
 
 	# build llvm IR
