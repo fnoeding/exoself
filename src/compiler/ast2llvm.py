@@ -907,7 +907,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 
 	def _onDefStruct(self, ast, name, members):
-		pass
+		self._module.add_type_name(name.text, ast.esType.toLLVMType())
 
 
 	def _onNoneConstant(self, ast):

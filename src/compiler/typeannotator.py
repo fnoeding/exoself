@@ -952,9 +952,12 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			names.append(x.children[0].text)
 
 		# add members
+		# FIXME derive type name from package and module!
 		t = ESType.createStruct(name.text, esTypes, names)
 		structType.payload = t.payload
 		structType.parents = t.parents
+
+		ast.esType = structType
 
 
 	def _onNoneConstant(self, ast):
