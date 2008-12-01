@@ -4,9 +4,18 @@
 
 nbody = bld.new_task_gen('es')
 nbody.source = 'nbody.es'
-nbody.llvmTaregt = 'nbody.bc'
+nbody.llvmTarget = 'nbody.bc'
 nbody.target = 'nbody_es'
 nbody.uselib = 'm'
+
+
+nbody2 = bld.new_task_gen('es')
+nbody2.source = 'nbody_structs.es ../../hacks/formatting.es'
+nbody2.llvmTarget = 'nbody_structs_es.bc'
+nbody2.target = 'nbody_structs_es'
+nbody2.uselib = 'm'
+nbody2.uselib_local = 'hacks'
+
 
 # TODO add optimization
 nbodyC = bld.new_task_gen('cc', 'program')

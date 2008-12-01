@@ -35,6 +35,7 @@ def configure(conf):
 	# exoself
 	conf.check_tool('exoself', tooldir='./waftools')
 	conf.env.append_unique('EXOSELF_SEARCHPATH', os.path.join(root, 'src', 'runtime'))
+	conf.env.append_unique('EXOSELF_SEARCHPATH', os.path.join(root, 'src')) # for hacks
 
 
 
