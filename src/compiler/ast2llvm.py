@@ -906,7 +906,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 		ast.llvmValue = self._currentBuilder.malloc_array(ast.esType.dereference().toLLVMType(), numElements)
 
 
-	def _onDefStruct(self, ast, name, varNames, varTypes):
+	def _onDefStruct(self, ast, name, members):
 		pass
 
 

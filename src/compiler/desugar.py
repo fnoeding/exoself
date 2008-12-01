@@ -228,9 +228,37 @@ def _desugarFunctionOperator(tree):
 	tree.children = [names[0], current, lastArg]
 
 
+def _desugarMultiDefVar(tree):
+	# transforms ^(DEFVAR NAME+ type_name) to multiple DEFVAR nodes with each one name, order is preserved
+
+	if not tree.children:
+		return
+
+	i = 0
+	while i < len(tree.children):
+		x = tree.children[i]
+		if x.type == TreeType.DEFVAR and len(x.children) > 2:
+			firstName = x.children[0]
+			names = x.children[1:-1]
+			typeName = x.children[-1]
+			x.children = [firstName, typeName]
+
+			i += 1
+
+			for name in names:
+				newNode = x.copy(False)
+				newNode.children = [name, typeName.copy(True)]
+				tree.children.insert(i, newNode)
+
+				i += 1
+		else:
+			i += 1
+	assert(i == len(tree.children))
+
+
 
 # actions get called for every node
-_actions = [_desugarLoopElse, _fixPackageAndModuleNames, _desugarNegativeNumberConstants, _desugarDereference, _desugarFunctionOperator]
+_actions = [_desugarLoopElse, _fixPackageAndModuleNames, _desugarNegativeNumberConstants, _desugarDereference, _desugarFunctionOperator, _desugarMultiDefVar]
 # special actions traverse the tree themselves
 _specialActions = [_desugarMultiAssign]
 

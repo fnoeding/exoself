@@ -886,7 +886,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			if indexExpression.type == TreeType.NAME:
 				m = esType.getStructMemberTypeByName(indexExpression.text)
 				if not m:
-					self._raiseException(RecoverableCompileError, tree=indexExpression, inlineTExt='struct has no such member')
+					self._raiseException(RecoverableCompileError, tree=indexExpression, inlineText='struct has no such member')
 				ast.esType = m
 			else:
 				raise NotImplementedError('TODO')
@@ -934,20 +934,22 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			# FIXME check type!
 
 
-	def _onDefStruct(self, ast, name, varNames, varTypes):
+	def _onDefStruct(self, ast, name, members):
 		# since structs can refer to them selves using pointers we have to add this type right now
 		structType = ESType.createStruct(name.text, [], [])
 		self._addSymbol(fromTree=name, symbol=structType)
 
 		esTypes = []
 		names = []
-		for i in range(len(varTypes)):
-			self._dispatch(varTypes[i])
-			esTypes.append(varTypes[i].esType)
+		for x in members:
+			# DO NOT dispatch x itself! that would add entries to a symbol table that does not exist
+			# process name manually and dispatch type name
+			self._dispatch(x.children[1])
+			esTypes.append(x.children[1].esType)
 
-			names.append(varNames[i].text)
-
-		# TODO check for duplicate names in varNames
+			if x.children[0].text in names:
+				self._raiseException(RecoverableCompileError, tree=x.children[0], inlineText='name already used')
+			names.append(x.children[0].text)
 
 		# add members
 		t = ESType.createStruct(name.text, esTypes, names)

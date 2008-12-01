@@ -324,14 +324,7 @@ class ASTWalker(object):
 		elif t == tt.STRUCT:
 			callee = self._onDefStruct
 			kwargs['name'] = ast.children[0]
-
-			varNames = []
-			varTypes = []
-			for i in range((len(ast.children) - 1) / 2):
-				varNames.append(ast.children[1 + 2 * i])
-				varTypes.append(ast.children[1 + 2 * i + 1])
-			kwargs['varNames'] = varNames
-			kwargs['varTypes'] = varTypes
+			kwargs['members'] = ast.children[1:]
 		elif t == tt.NONE_CONSTANT:
 			callee = self._onNoneConstant
 		elif t == tt.BOOLEAN_CONSTANT:

@@ -33,7 +33,7 @@ grammar exoself;
 options {
 	output = AST;
 	language = Python;
-	k = 2;
+//	k = 2;
 }
 
 //****************************************************************************
@@ -246,7 +246,7 @@ typedef_stmt: TYPEDEF^ NAME AS! type_name;
 alias_stmt: ALIAS^ NAME AS! type_name;
 
 
-defvar: NAME AS type_name -> ^(DEFVAR NAME type_name);
+defvar: NAME (COMMA NAME)* AS type_name -> ^(DEFVAR NAME+ type_name);// conflicts with list_assign; enforces infinite look ahead
 
 deffunc:
 	x=DEF deffuncmodifiers
@@ -269,7 +269,7 @@ block_content: block | compound_stmt;
 
 
 
-defstruct: STRUCT^ NAME LCURLY! (variable_as_type SEMI!)+ RCURLY!;
+defstruct: STRUCT^ NAME LCURLY! (defvar SEMI!)+ RCURLY!;
 
 
 test_expr: or_test;
