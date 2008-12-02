@@ -79,15 +79,18 @@ class Tree(object):
 		if copyChildren:
 			return copy.deepcopy(self)
 		else:
-			t = copy.deepcopy(self) # TODO this is slower but will always work, use copy.copy instead? might cause problems with 'unknown' attributes
-			t.children = []
+			# we must also use deepcopy even when no children should be copied - there may be unknown attributes added to this instance which should not be copied in a shallow way
+			saveChildren = self.children
+			self.children = []
+			t = copy.deepcopy(self)
+			self.children = saveChildren
 			return t
 
 
 	def getChildCount(self):
 		return len(self.children)
 
-	
+
 	def getChild(self, i):
 		return self.children[i]
 
@@ -108,7 +111,7 @@ class Tree(object):
 		s.append(')')
 
 		return ''.join(s)
-		
+
 
 
 
