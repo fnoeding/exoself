@@ -33,7 +33,7 @@ grammar exoself;
 options {
 	output = AST;
 	language = Python;
-//	k = 2;
+	k = 3;
 }
 
 //****************************************************************************
@@ -210,14 +210,13 @@ while_stmt: WHILE^ expr block (ELSE! block)?;
 simple_stmt:
 	(pass_stmt
 	| return_stmt
-	| defvar
 	| assert_stmt
 	| break_stmt
 	| continue_stmt
 	| typedef_stmt
 	| alias_stmt
 	| expr_stmt
-	| list_assign
+	| defvar_or_list_assign
 	) (SEMI!+);
 
 
@@ -232,9 +231,17 @@ expr_stmt:
 	);
 
 
-list_assign: list_assign_lhs ASSIGN list_assign_rhs -> ^(LISTASSIGN list_assign_lhs list_assign_rhs);
-list_assign_lhs: variable_name (COMMA variable_name)+ -> ^(ASSIGNLIST variable_name+);
+defvar_or_list_assign:
+	a+=NAME (COMMA a+=NAME)*
+	(
+		(AS type_name -> ^(DEFVAR $a+ type_name))
+		| (COMMA a+=NAME ASSIGN list_assign_rhs -> ^(LISTASSIGN ^(ASSIGNLIST ^(VARIABLE $a)+) list_assign_rhs))
+	)
+	;
+
 list_assign_rhs: expr (COMMA expr)+ -> ^(ASSIGNLIST expr+);
+
+
 
 
 pass_stmt: PASS^;
@@ -246,7 +253,6 @@ typedef_stmt: TYPEDEF^ NAME AS! type_name;
 alias_stmt: ALIAS^ NAME AS! type_name;
 
 
-defvar: NAME (COMMA NAME)* AS type_name -> ^(DEFVAR NAME+ type_name);// conflicts with list_assign; enforces infinite look ahead
 
 deffunc:
 	x=DEF deffuncmodifiers
@@ -269,7 +275,8 @@ block_content: block | compound_stmt;
 
 
 
-defstruct: STRUCT^ NAME LCURLY! (defvar SEMI!)+ RCURLY!;
+defstructvar: NAME (COMMA NAME)* AS type_name -> ^(DEFVAR NAME+ type_name);// conflicts with list_assign; enforces infinite look ahead
+defstruct: STRUCT^ NAME LCURLY! (defstructvar SEMI!)+ RCURLY!;
 
 
 test_expr: or_test;
