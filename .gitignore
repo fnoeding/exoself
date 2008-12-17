@@ -9,3 +9,4 @@ src/compiler/grammar/exoself__.g
 tests_tmp/*
 .lock-wscript
 .waf-*
+doc/build/*
