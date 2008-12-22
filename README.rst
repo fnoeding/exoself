@@ -14,6 +14,10 @@ Quickstart
 2. add the llvm binary directory to your PATH variable if it's not already there
 3. in the root directory execute ``./waf configure`` followd by ``./waf``
 
+Known problems
+--------------
+ANTLR 3.1.1 seems to have problems with some Java versions, at least 1.5.0 and will miscompile the grammar definition, so the compiler will not work. In this case try 1.6.0. Edit src/compiler/Makefile and edit the line ``JAVA=java`` to point to the correct java executable.
+
 
 Notes for OS X users
 --------------------
