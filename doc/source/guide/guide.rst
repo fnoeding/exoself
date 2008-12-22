@@ -13,11 +13,13 @@ Syntactical Constructs
 
     assert
     alias
+    block
     break
     cast
     continue
     def
     for
+    functioncalls
     if
     import
     literals
@@ -30,6 +32,13 @@ Syntactical Constructs
     typedef
     variables
     while
+
+Further Information
+--------------------
+.. toctree::
+    :maxdepth: 2
+
+    typesystem
 
 
 
