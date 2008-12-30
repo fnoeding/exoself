@@ -162,6 +162,10 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		# init some important data structures
 		############################################
 		self._initModuleSymbolTable()
+		ast.moduleCTors = []
+		ast.moduleDTors = []
+		self._moduleCTors = ast.moduleCTors
+		self._moduleDTors = ast.moduleDTors
 
 
 		############################################
@@ -325,6 +329,24 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		esFunction = ESFunction(name.text, self._moduleNode.packageName, self._moduleNode.moduleName, functionType, paramNames, mangling=mangling, linkage=linkage)
 		ast.esFunction = esFunction
 		ast.esType = functionType
+
+
+		if name.text in ['ctor', 'dtor']:
+			# function is a constructor / destructor
+			# TODO allow only global functions to be module constructors / destructors
+
+			moduleXTor = True
+			if moduleXTor:
+				# module XTors must have the signature 'def Xtor() as void'
+				expectedType = ESType.createFunction([self._findSymbol(name=u'void', type_=ESType)], [])
+				if not functionType.isEquivalentTo(expectedType, True): # structurally / name based should not matter for module Xtors
+					self._raiseException(RecoverableCompileError, tree=name, inlineText='a module ctor / dtor must have the type \'def Xtor() as void\'')
+
+				if name.text == 'ctor':
+					self._moduleCTors.append(esFunction)
+				else:
+					self._moduleDTors.append(esFunction)
+
 
 		# TODO check for duplicate entries
 		self._addSymbol(fromTree=name, symbol=esFunction)
@@ -705,6 +727,19 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		self._dispatch(typeName)
 
 		esType = typeName.esType
+		esVar = ESVariable(variableName.text, esType)
+		self._addSymbol(fromTree=variableName, symbol=esVar)
+
+
+	def _onDefGlobal(self, ast, variableName, typeName, expression):
+		# either typeName xor expression is != None
+		if typeName:
+			self._dispatch(typeName)
+			esType = typeName.esType
+		else:
+			self._dispatch(expression)
+			esType = expression.esType
+
 		esVar = ESVariable(variableName.text, esType)
 		self._addSymbol(fromTree=variableName, symbol=esVar)
 

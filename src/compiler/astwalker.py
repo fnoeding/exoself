@@ -252,6 +252,15 @@ class ASTWalker(object):
 			callee = self._onDefVariable
 			kwargs['variableName'] = ast.children[0]
 			kwargs['typeName'] = ast.children[1]
+		elif t == tt.DEFGLOBAL:
+			callee = self._onDefGlobal
+			kwargs['variableName'] = ast.children[0]
+			if ast.children[1].type == tt.TYPENAME:
+				kwargs['typeName'] = ast.children[1]
+				kwargs['expression'] = None
+			else:
+				kwargs['typeName'] = None
+				kwargs['expression'] = ast.children[1]
 		elif t == tt.ASSIGN:
 			callee = self._onAssign
 			kwargs['assigneeExpr'] = ast.children[0]

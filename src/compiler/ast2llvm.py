@@ -129,6 +129,35 @@ class ModuleTranslator(astwalker.ASTWalker):
 				self._raiseException(RecoverableCompileError, postText=s)
 
 
+	def _addModuleXTors(self):
+		# create *appending* global_ctors and global_dtors variables
+		ft = Type.pointer(Type.function(Type.void(), []))
+		st = Type.struct([Type.int(32), ft])
+
+		def addXTors(xtors, what):
+			assert what in ['ctors', 'dtors']
+
+			if not xtors:
+				return
+
+			t = Type.array(st, len(xtors))
+			gvar = self._module.add_global_variable(t, 'llvm.global_%s' % what)
+			gvar.linkage = LINKAGE_APPENDING
+
+			elems = []
+			for x in xtors:
+				prio = Constant.int(Type.int(32), 65535)
+				func = x.llvmRef
+				elems.append(Constant.struct([prio, func]))
+
+			init = Constant.array(st, elems)
+			gvar.initializer = init
+
+		addXTors(self._moduleCTors, 'ctors')
+		addXTors(self._moduleDTors, 'dtors')
+
+
+
 	def _findCurrentFunction(self):
 		for x in reversed(self._nodes):
 			if x.type == TreeType.DEFFUNC:
@@ -143,6 +172,9 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 		self._module = Module.new(ast.moduleName)
 		self._moduleNode = ast
+
+		self._moduleCTors = ast.moduleCTors
+		self._moduleDTors = ast.moduleDTors
 
 		# add some helper functions / prototypes / ... to the module
 		self._addHelperFunctionsPreTranslation()
@@ -162,6 +194,8 @@ class ModuleTranslator(astwalker.ASTWalker):
 		if self._errors:
 			raise CompileError('errors occured during compilation: aborting')
 
+		# set module ctors, dtors
+		self._addModuleXTors()
 
 		# finally add some more helper functions / prototypes / ... to the module
 		self._addHelperFunctionsPostTranslation()
@@ -550,6 +584,25 @@ class ModuleTranslator(astwalker.ASTWalker):
 	def _onDefVariable(self, ast, variableName, typeName):
 		var = self._findSymbol(fromTree=variableName, type_=ESVariable)
 		var.llvmRef = self._createAllocaForVar(variableName.text, var.esType.toLLVMType())
+
+
+	def _onDefGlobal(self, ast, variableName, typeName, expression):
+		var = self._findSymbol(fromTree=variableName, type_=ESVariable)
+		llvmType = var.toLLVMType()
+		mangledName = variableName.text # FIXME use name mangling!
+		llvmRef = var.llvmRef = self._module.add_global_variable(llvmType, mangledName)
+
+		if typeName:
+			llvmRef.initializer = Constant.null(llvmType)
+		else:
+			try:
+				self._dispatch(expression)
+				llvmRef.initializer = expression.llvmValue
+			except AttributeError, ae:
+				assert('_currentBuilder' in str(ae)) # TODO replace with check based on AST
+
+				self._raiseException(RecoverableCompileError, tree=expression, inlineText='expected trivial constant expression')
+
 
 
 	def _onCallFunc(self, ast, calleeName, expressions):

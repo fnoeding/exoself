@@ -108,6 +108,7 @@ tokens {
 	DEFFUNCARGS;
 	DEFFUNCMODIFIERS;
 	DEFVAR;
+	DEFGLOBAL;
 	BLOCK;
 	SIMPLE_STATEMENT;
 	INTEGER_CONSTANT;
@@ -189,7 +190,13 @@ package_name: NAME (DOT NAME)*;
 module_stmt: MODULE^ NAME (SEMI!)?;
 
 
-global_stmt: deffunc | import_stmt | typedef_stmt | alias_stmt | defstruct;
+global_stmt:
+	deffunc
+	| defglobal SEMI!
+	| import_stmt
+	| typedef_stmt
+	| alias_stmt
+	| defstruct;
 
 import_stmt:
 	FROM module_name IMPORT STAR SEMI?-> ^(IMPORTALL module_name);
@@ -240,6 +247,12 @@ defvar_or_list_assign:
 	;
 
 list_assign_rhs: expr (COMMA expr)+ -> ^(ASSIGNLIST expr+);
+
+
+defglobal:
+	(NAME AS type_name -> ^(DEFGLOBAL NAME type_name))
+	| (NAME ASSIGN expr -> ^(DEFGLOBAL NAME expr))
+	;
 
 
 
