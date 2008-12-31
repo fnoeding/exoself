@@ -191,12 +191,13 @@ module_stmt: MODULE^ NAME (SEMI!)?;
 
 
 global_stmt:
-	deffunc
-	| defglobal SEMI!
+	(deffunc
+	| defglobal
 	| import_stmt
 	| typedef_stmt
 	| alias_stmt
-	| defstruct;
+	| defstruct
+	) (SEMI!)?;
 
 import_stmt:
 	FROM module_name IMPORT STAR SEMI?-> ^(IMPORTALL module_name);
