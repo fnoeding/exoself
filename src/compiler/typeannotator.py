@@ -179,10 +179,10 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 
 		############################################
-		# get global structs
+		# get global structs, aliases, typedefs
 		############################################
 		for x in statements:
-			if x.type == TreeType.STRUCT:
+			if x.type in [TreeType.STRUCT, TreeType.ALIAS, TreeType.TYPEDEF]:
 				self._dispatch(x)
 
 		############################################
@@ -199,7 +199,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		# annotate the whole tree
 		############################################
 		for x in statements:
-			if x.type in [TreeType.IMPORTALL, TreeType.STRUCT]:
+			if x.type in [TreeType.IMPORTALL, TreeType.STRUCT, TreeType.ALIAS, TreeType.TYPEDEF]:
 				# already done
 				continue
 
