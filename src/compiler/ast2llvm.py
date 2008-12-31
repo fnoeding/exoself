@@ -280,11 +280,11 @@ class ModuleTranslator(astwalker.ASTWalker):
 		self._dispatch(block)
 
 		returnTypes = esFunction.esType.getFunctionReturnTypes()
-		if len(returnTypes) == 1 and returnTypes[0].toLLVMType() == Type.void():
-			self._currentBuilder.ret_void()
-		else:
-			bb = self._currentBuilder.block
-			if not (bb.instructions and bb.instructions[-1].is_terminator):
+		bb = self._currentBuilder.block
+		if not (bb.instructions and bb.instructions[-1].is_terminator):
+			if len(returnTypes) == 1 and returnTypes[0].toLLVMType() == Type.void():
+				self._currentBuilder.ret_void()
+			else:
 				s = self._generateContext(preText='warning:', postText='control flow possibly reaches end of non-void function. Inserting trap instruction...', lineBase1=block.line, numAfter=3)
 				trapFunc = Function.intrinsic(self._module, INTR_TRAP, []);
 				self._currentBuilder.call(trapFunc, [])
