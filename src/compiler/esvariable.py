@@ -33,12 +33,16 @@ from estype import ESType
 
 
 class ESVariable(object):
-	def __init__(self, name, esType, storageClass='auto', linkage='default'):
+	def __init__(self, name, package, module, esType, storageClass='auto', linkage='default', mangling='default'):
 		assert(isinstance(esType, ESType))
 		self.name = name
+		self.package = package
+		self.module = module
 		self._esType = esType # type can be modified by certain storage classes
 		self.storageClass = storageClass
 		self.linkage = linkage # only useful for global variables
+		assert(mangling in ['default', 'C'])
+		self.mangling = mangling
 
 
 	def getESType(self):
@@ -67,6 +71,33 @@ class ESVariable(object):
 		
 	llvmType = property(toLLVMType)
 	esType = property(getESType)
+
+
+	def mangleName(self):
+		if self.mangling == 'default':
+			return self._mangleNameDefault()
+		elif self.mangling == 'C':
+			return self.name
+		else:
+			assert(0 and 'dead code path')
+
+
+	def _mangleNameDefault(self):
+		# header
+		s = ['__ESG_']
+
+		# package name: length of package name string, then package name
+		s.append('%d%s' % (len(self.package), self.package))
+		# module name: length of module name string, then module name
+		s.append('%d%s' % (len(self.module), self.module))
+
+		# visual separator, length of variable name string, then variable name and again visual separator
+		s.append('__')
+		s.append('%d%s' % (len(self.name), self.name))
+
+		return ''.join(s)
+
+
 
 
 

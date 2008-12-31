@@ -137,6 +137,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			ast.packageName = packageName.text
 		else:
 			ast.packageName = ''
+		self._packageName = ast.packageName
 
 		if moduleName:
 			ast.moduleName = moduleName.text
@@ -148,6 +149,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			ast.moduleName = os.path.split(self._filename)[1]
 			if ast.moduleName.endswith('.es'):
 				ast.moduleName = ast.moduleName[:-3]
+		self._moduleName = ast.moduleName
 
 		# make sure module name is valid
 		m = re.match('[a-zA-Z_][a-zA-Z_0-9]*', ast.moduleName)
@@ -286,11 +288,15 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		symbols = st.getAllSymbols()
 
 		for k, v in symbols.items():
-			# FIXME for now only copy ESFunction's and especially not ESType's to avoid name clashes
 			if isinstance(v, list):
+				# ESFunction's
 				for x in v:
 					assert(isinstance(x, ESFunction))
 					self._addSymbol(name=k, symbol=x)
+			elif isinstance(v, ESVariable):
+				# ESVariable's
+				self._addSymbol(name=k, symbol=v)
+			# TODO add ESType's
 
 
 
@@ -364,7 +370,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		esParamTypes = esFunction.esType.getFunctionParameterTypes()
 		for i in range(len(esFunction.parameterNames)):
 			varName=parameterNames[i].text
-			esVar = ESVariable(varName, esParamTypes[i])
+			esVar = ESVariable(varName, self._packageName, self._moduleName, esParamTypes[i])
 			self._addSymbol(fromTree=parameterNames[i], symbol=esVar)
 
 		blockNode = ast.children[4]
@@ -727,7 +733,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		self._dispatch(typeName)
 
 		esType = typeName.esType
-		esVar = ESVariable(variableName.text, esType)
+		esVar = ESVariable(variableName.text, self._packageName, self._moduleName, esType)
 		self._addSymbol(fromTree=variableName, symbol=esVar)
 
 
@@ -740,7 +746,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			self._dispatch(expression)
 			esType = expression.esType
 
-		esVar = ESVariable(variableName.text, esType)
+		esVar = ESVariable(variableName.text, self._packageName, self._moduleName, esType)
 		self._addSymbol(fromTree=variableName, symbol=esVar)
 
 
@@ -756,7 +762,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 			if not var:
 				# create new variable with type of expression
-				var = ESVariable(varNameNode.text, esType)
+				var = ESVariable(varNameNode.text, self._packageName, self._moduleName, esType)
 				self._addSymbol(fromTree=varNameNode, symbol=var)
 			else:
 				if not var.esType.isEquivalentTo(esType, False):
@@ -818,7 +824,7 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 			if not var.esType.isEquivalentTo(int32, False):
 				self._raiseException(RecoverableCompileError, tree=variableName, inlineText='loop variable must be of type int32 until support for other types is implemented')
 		else:
-			var = ESVariable(variableName.text, int32)
+			var = ESVariable(variableName.text, self._packageName, self._moduleName, int32)
 			self._addSymbol(fromTree=variableName, symbol=var)
 
 		self._dispatch(block)

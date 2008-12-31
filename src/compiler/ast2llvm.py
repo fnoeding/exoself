@@ -179,8 +179,35 @@ class ModuleTranslator(astwalker.ASTWalker):
 		# add some helper functions / prototypes / ... to the module
 		self._addHelperFunctionsPreTranslation()
 
+		# first add global variables
+		for x in statements:
+			if x.type == TreeType.DEFGLOBAL:
+				self._dispatch(x)
+
+		# imported global variables don't have llvmRef entries: add them
+		for k, v in ast.symbolTable.getAllSymbols().iteritems():
+			if not isinstance(v, ESVariable):
+				continue
+
+			if getattr(v, 'llvmRef', None):
+				continue
+
+			# can't reuse _onDefGlobal at the moment, since we need to declare an "extern" global variable
+
+			llvmType = v.toLLVMType()
+			mangledName = v.mangleName()
+			v.llvmRef = self._module.add_global_variable(llvmType, mangledName)
+
+			# use default linkage: external
+
+
+
 		# translate
 		for x in statements:
+			# skip globals, as they were already handled above
+			if x.type == TreeType.DEFGLOBAL:
+				continue
+
 			try:
 				self._dispatch(x)
 			except RecoverableCompileError, e:
@@ -589,8 +616,10 @@ class ModuleTranslator(astwalker.ASTWalker):
 	def _onDefGlobal(self, ast, variableName, typeName, expression):
 		var = self._findSymbol(fromTree=variableName, type_=ESVariable)
 		llvmType = var.toLLVMType()
-		mangledName = variableName.text # FIXME use name mangling!
-		llvmRef = var.llvmRef = self._module.add_global_variable(llvmType, mangledName)
+		mangledName = var.mangleName() # FIXME use name mangling!
+		var.llvmRef = self._module.add_global_variable(llvmType, mangledName)
+		llvmRef = var.llvmRef
+		#llvmRef.linkage = LINKAGE_COMMON
 
 		if typeName:
 			llvmRef.initializer = Constant.null(llvmType)
@@ -777,7 +806,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 			ref = self._currentBuilder.alloca(expressions[i].esType.toLLVMType(), u'listassign_tmp')
 			self._currentBuilder.store(expressions[i].llvmValue, ref)
 
-			esVar = ESVariable(u'listassign_tmp', expressions[i].esType)
+			esVar = ESVariable(u'listassign_tmp', '__local', '__local', expressions[i].esType) # TODO insert real pkg / module names
 			esVar.llvmRef = ref
 			temps.append(esVar)
 

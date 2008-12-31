@@ -4,9 +4,24 @@ l = bld.glob('*.es')
 for x in l:
 	base = x[:-3]
 
+	if base.startswith('t006'):
+		continue
+
 	test = bld.new_task_gen('es')
 	test.source = base + '.es'
 	test.llvmTarget = base + '.bc'
 	test.target = base
 	test.unitTest = {'ret': 0}
-	
+
+
+def makeTest(bld, sources, destBase, dirs='.'):
+	test = bld.new_task_gen('es')
+	test.find_sources_in_dirs(dirs)
+	test.source = sources
+	test.llvmTarget = destBase + '.bc'
+	test.target = destBase
+	test.unitTest = {'ret': 0}
+
+
+makeTest(bld, 't006_main.es t006_mod.es', 't006')
+
