@@ -100,7 +100,7 @@ def scan(self):
 	absParentPath = os.path.abspath(parentNode.srcpath(self.env))
 
 
-	cmd = '%s --save-dependencies - %s' % (self.env['EXOSELF'], nodePath)
+	cmd = '%s --save-dependencies - %s > /dev/null 2> /dev/null' % (self.env['EXOSELF'], nodePath)
 	dependencies = Utils.cmd_output(cmd, silent=True)
 	for dep in dependencies.split():
 		if dep in seen:
