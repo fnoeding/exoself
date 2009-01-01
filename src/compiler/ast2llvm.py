@@ -46,6 +46,7 @@ from errors import *
 import astwalker
 from tree import Tree, TreeType
 import typeannotator
+import llvmdebug
 
 
 
@@ -157,6 +158,30 @@ class ModuleTranslator(astwalker.ASTWalker):
 		addXTors(self._moduleDTors, 'dtors')
 
 
+	def _setupDebugInformation(self):
+		if not self._debugMode:
+			return
+
+		int1 = Type.int(1)
+		int32 = Type.int(32)
+		int64 = Type.int(64)
+		pEmptyStruct = Type.pointer(Type.struct([]))
+		pint8 = Type.pointer(Type.int(8))
+
+		self._dbgVersion = 6 << 16
+
+		# add declarations for debug intrinsics
+		self._dbgIntrinsics = llvmdebug.addIntrinsics(self._module)
+
+		# add debug types
+		llvmdebug.addTypes(self._module)
+
+		# per program data
+		llvmdebug.addGlobalInfo(self._module)
+
+		# per compile unit data
+		llvmdebug.addCompileUnitInfo(self._module, self._filename)
+
 
 	def _findCurrentFunction(self):
 		for x in reversed(self._nodes):
@@ -175,6 +200,9 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 		self._moduleCTors = ast.moduleCTors
 		self._moduleDTors = ast.moduleDTors
+
+		# setup debug Info
+		self._setupDebugInformation()
 
 		# add some helper functions / prototypes / ... to the module
 		self._addHelperFunctionsPreTranslation()
@@ -265,7 +293,8 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 		entryBB = llvmRef.append_basic_block('entry')
 		bEntry = Builder.new(entryBB)
-
+		if self._debugMode:
+			dbgSubProg = llvmdebug.addFunctionInfoStart(module=self._module, builder=bEntry, lineNumber=ast.line, name=esFunction.name, displayName=esFunction.name)
 
 		# add variables
 		for i,x in enumerate(parameterNames):
@@ -290,12 +319,17 @@ class ModuleTranslator(astwalker.ASTWalker):
 				self._currentBuilder.call(trapFunc, [])
 				self._currentBuilder.ret(Constant.int(Type.int(32), -1)) # and return, otherwise func.verify will fail
 
+		if self._debugMode:
+			llvmdebug.addFunctionInfoEnd(module=self._module, builder=self._currentBuilder, subprogram=dbgSubProg)
 
 		llvmRef.verify()
 
 
+
 	def _onBlock(self, ast, blockContent):
 		for x in blockContent:
+			if self._debugMode:
+				llvmdebug.addStopPoint(self._module, self._currentBuilder, x.line, x.charPos)
 			self._dispatch(x)
 
 
@@ -1014,10 +1048,11 @@ class ModuleTranslator(astwalker.ASTWalker):
 		ast.llvmValue = Constant.int(Type.int(1), value)
 
 
-	def walkAST(self, ast, absFilename, sourcecode=''):
+	def walkAST(self, ast, absFilename, sourcecode='', debugMode=False):
 		assert(ast.type == TreeType.MODULESTART)
 
 		self._module = None
+		self._debugMode = debugMode
 		astwalker.ASTWalker.walkAST(self, ast, absFilename, sourcecode)
 
 		self._module.verify()

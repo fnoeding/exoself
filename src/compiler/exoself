@@ -83,6 +83,7 @@ def main():
 	op.add_option('-c', help='compile only, do not link', dest='compileOnly', action='store_true')
 	op.add_option('-A', help='generate ast only', dest='astOnly', action='store_true')
 	op.add_option('-S', help='assemble only', dest='asmOnly', action='store_true')
+	op.add_option('-g', help='add debug information (prefer -O0 and llc -fast; otherwise could be broken)', dest='debugMode', action='store_true')
 
 	op.add_option('--save-dependencies', help='saves filenames the compiled module depends on to a file', dest='saveDependencies', default=None)
 
@@ -192,7 +193,7 @@ def main():
 	# build llvm IR
 	mt = ModuleTranslator()
 	try:
-		module = mt.walkAST(ast, fn, source)
+		module = mt.walkAST(ast, fn, source, debugMode=options.debugMode)
 	except CompileError, e:
 		print e.message.rstrip()
 		print 'aborting'
