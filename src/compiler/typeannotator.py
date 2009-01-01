@@ -605,9 +605,29 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 		for x in expressions:
 			self._dispatch(x)
 
-		esFunctions = self._findSymbol(fromTree=calleeName, type_=ESFunction)
+		# the callee can either be a function or a normal variable (--> function pointer)
+		esFunctions = self._findSymbol(fromTree=calleeName, type_=ESFunction, mayFail=True)
 		if not esFunctions:
-			self._raiseException(RecoverableCompileError, tree=calleeName, inlineText='no function with this name found')
+			# no function with this name found...
+			# try variable
+
+			esVariable = self._findSymbol(fromTree=calleeName, type_=ESVariable, mayFail=True)
+			if not esVariable:
+				self._raiseException(RecoverableCompileError, tree=calleeName, inlineText='no function with this name found')
+			esType = esVariable.esType
+
+			if not (esType.isPointer() and esType.dereference().isFunction()):
+				self._raiseException(RecoverableCompileError, tree=calleeName, inlineText='not a function pointer')
+
+			nParams = len(esType.dereference().getFunctionParameterTypes())
+			paramNames = []
+			for i in range(nParams):
+				paramNames.append(u'_%d' % i)
+
+			esF = ESFunction(u'__funcptr', u'__funcptr', u'__funcptr', esType.dereference(), paramNames)
+
+			esFunctions = [esF]
+
 
 		# functions may be overloaded, so determine the right one to call
 
@@ -694,9 +714,17 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 
 
 	def _onVariable(self, ast, variableName):
-		s = self._findSymbol(fromTree=variableName, type_=ESVariable)
+		# first try to find function with this name, then a normal variable
+		s = self._findSymbol(fromTree=variableName, type_=ESFunction, mayFail=True)
+		if s:
+			if len(s) > 1:
+				self._raiseException(RecoverableCompileError, tree=variableName, inlineText='taking the address of a overloaded function is not implemented, yet')
+			esType = s[0].esType.derivePointer()
+		else:
+			s = self._findSymbol(fromTree=variableName, type_=ESVariable)
+			esType = s.esType
 
-		ast.esType = s.esType
+		ast.esType = esType
 
 	def _onAssert(self, ast, expression):
 		self._dispatch(expression)
@@ -912,6 +940,23 @@ class ASTTypeAnnotator(astwalker.ASTWalker):
 					baseType = baseType.derivePointer()
 
 			ast.esType = baseType
+
+
+	def _onFunctionTypeName(self, ast):
+		# FIXME move ast unpacking to AstWalker!
+
+		types = []
+		for x in ast.children:
+			self._dispatch(x)
+			types.append(x.esType)
+
+		esType = ESType.createFunction([types[-1]], types[:-1])
+		esType = esType.derivePointer()
+
+		ast.esType = esType
+
+
+
 
 
 	def _onDereference(self, ast, expression, indexExpression):

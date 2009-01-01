@@ -69,6 +69,8 @@ tokens {
 	BITCAST = 'bitcast';
 	ALIAS = 'alias';
 	TYPEDEF = 'typedef';
+	FUNCTION = 'function';
+	DELEGATE = 'delegate';
 	NEW = 'new';
 	DELETE = 'delete';// for now only reserved
 	STRUCT = 'struct';
@@ -124,6 +126,7 @@ tokens {
 	IMPORTALL;
 	IMPLICITCAST;// used inside the compiler, not the lexer / parser
 	TYPENAME;
+	FUNCTIONTYPENAME;
 	DEREFERENCE;
 	FUNCTIONOPERATOR;
 	ADDRESSOF;
@@ -200,7 +203,7 @@ global_stmt:
 	) (SEMI!)?;
 
 import_stmt:
-	FROM module_name IMPORT STAR SEMI?-> ^(IMPORTALL module_name);
+	FROM module_name IMPORT STAR -> ^(IMPORTALL module_name);
 module_name: DOT* NAME (DOT NAME)*;
 
 
@@ -369,7 +372,10 @@ special_constant:
 
 variable_name: NAME -> ^(VARIABLE NAME);
 
-type_name: NAME (LPAREN type_name RPAREN)? (STAR | DOUBLESTAR)* -> ^(TYPENAME NAME type_name? STAR* DOUBLESTAR*);
+type_name:
+	(NAME (LPAREN type_name RPAREN)? (STAR | DOUBLESTAR)* -> ^(TYPENAME NAME type_name? STAR* DOUBLESTAR*))
+	| (FUNCTION LPAREN (type_name (COMMA type_name)*)? RPAREN AS type_name -> ^(FUNCTIONTYPENAME type_name+))
+	;
 
 function_call: NAME LPAREN (expr (COMMA expr)* COMMA?)? RPAREN -> ^(CALLFUNC NAME expr*);
 

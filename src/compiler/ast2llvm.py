@@ -568,10 +568,19 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 
 	def _onVariable(self, ast, variableName):
+		# first try to find a function (which resolves to it's address), then a normal variable
+		flist = self._findSymbol(fromTree=variableName, type_=ESFunction, mayFail=True)
+		if flist:
+			if len(flist) > 1:
+				self._raiseException(RecoverableCompileError, tree=variableName, inlineText='taking the address of a overloaded function is not implemented, yet')
 
-		var = self._findSymbol(fromTree=variableName, type_=ESVariable)
-		ast.llvmValue = self._currentBuilder.load(var.llvmRef)
-		ast.llvmRef = var.llvmRef
+			f = flist[0]
+			ast.llvmValue = f.llvmRef
+			ast.llvmRef = f.llvmRef
+		else:
+			var = self._findSymbol(fromTree=variableName, type_=ESVariable)
+			ast.llvmValue = self._currentBuilder.load(var.llvmRef)
+			ast.llvmRef = var.llvmRef
 
 
 
@@ -635,8 +644,6 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 
 	def _onCallFunc(self, ast, calleeName, expressions):
-
-
 		params = []
 		for x in expressions:
 			self._dispatch(x)
@@ -646,14 +653,20 @@ class ModuleTranslator(astwalker.ASTWalker):
 		esFunction = ast.esFunction
 		llvmFunc = getattr(esFunction, 'llvmRef', None)
 		if not llvmFunc:
+			# try to find function in this module
 			try:
 				llvmFunc = self._module.get_function_named(esFunction.mangledName)
 			except LLVMException:
 				llvmFunc = None
 
 			if not llvmFunc:
-				# function was not declared, yet...
-				llvmFunc = self._module.add_function(esFunction.esType.toLLVMType(), esFunction.mangledName)
+				# was callee a function pointer?
+				esVariable = self._findSymbol(fromTree=calleeName, type_=ESVariable, mayFail=True)
+				if esVariable:
+					llvmFunc = self._currentBuilder.load(esVariable.llvmRef)
+				else:
+					# function was not declared, yet...
+					llvmFunc = self._module.add_function(esFunction.esType.toLLVMType(), esFunction.mangledName)
 		ast.llvmValue = self._currentBuilder.call(llvmFunc, params)
 
 

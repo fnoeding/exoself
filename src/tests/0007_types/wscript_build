@@ -9,4 +9,7 @@ for x in l:
 	test.llvmTarget = base + '.bc'
 	test.target = base
 	test.unitTest = {'ret': 0}
+
+	if base == '019_functionpointer':
+		test.uselib = 'dl'
 	

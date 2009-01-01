@@ -296,6 +296,8 @@ class ASTWalker(object):
 			kwargs['typeName'] = ast.children[1]
 		elif t == tt.TYPENAME:
 			callee = self._onTypeName
+		elif t == tt.FUNCTIONTYPENAME:
+			callee = self._onFunctionTypeName
 		elif t == tt.DEREFERENCE:
 			callee = self._onDereference
 			kwargs['expression'] = ast.children[0]
@@ -459,6 +461,8 @@ class ASTWalker(object):
 				bad = True
 
 			if bad:
+				if mayFail:
+					return None
 				self._raiseException(RecoverableCompileError, tree=fromTree, inlineText='symbol did not match expected type: %s' % type_) # instead of str(type_) use a better description
 
 		return s
