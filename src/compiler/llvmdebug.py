@@ -281,12 +281,6 @@ def addLocalVariableInfo(module, builder, llvmRef, subprogram, name, lineNumber,
 	varTypes['ret'] = 258
 	varType = varTypes[varType]
 
-	# FIXME HACK: llvm-py does not yet provide an "bitcastinst"
-	import llvm._core
-	ptr = llvm._core.LLVMBuildBitCast(builder.ptr, llvmRef.ptr, _pEmptyStruct.ptr, '')
-	llvmRefPES = Value(ptr)
-
-
 	nameData = Constant.stringz(name)
 	name = _addGlobal(module, nameData.type, '__dbgstr', LINKAGE_INTERNAL, nameData)
 
@@ -305,7 +299,7 @@ def addLocalVariableInfo(module, builder, llvmRef, subprogram, name, lineNumber,
 
 
 	declareVar = module.get_function_named('llvm.dbg.declare')
-	builder.call(declareVar, [llvmRefPES, variable.bitcast(_pEmptyStruct)])
+	builder.call(declareVar, [builder.bitcast(llvmRef, _pEmptyStruct), variable.bitcast(_pEmptyStruct)])
 
 
 
