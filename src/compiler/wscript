@@ -28,6 +28,7 @@ esvalue.py
 esvariable.py
 exoself
 lexer.py
+llvmdebug.py
 parser.py
 setuppaths.py
 source2ast.py

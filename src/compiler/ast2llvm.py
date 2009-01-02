@@ -295,17 +295,21 @@ class ModuleTranslator(astwalker.ASTWalker):
 		bEntry = Builder.new(entryBB)
 		if self._debugMode:
 			dbgSubProg = llvmdebug.addFunctionInfoStart(module=self._module, builder=bEntry, lineNumber=ast.line, name=esFunction.name, displayName=esFunction.name)
+			ast.dbgSubProg = dbgSubProg
+
 
 		# add variables
 		for i,x in enumerate(parameterNames):
 			var = self._findSymbol(name=x.text, type_=ESVariable)
 			var.llvmRef = self._createAllocaForVar(x.text, var.toLLVMType(), llvmRef.args[i])
 
+			if self._debugMode:
+				llvmdebug.addLocalVariableInfo(module=self._module, builder=bEntry, llvmRef=var.llvmRef, subprogram=dbgSubProg, name=x.text, lineNumber=x.line, varType='arg')
 
+		# branch from entry to real code block and dispatch function body
 		bb = llvmRef.append_basic_block('bb')
-		bEntry.branch(bb)
-
 		self._currentBuilder = Builder.new(bb)
+		bEntry.branch(bb)
 		self._dispatch(block)
 
 		returnTypes = esFunction.esType.getFunctionReturnTypes()
@@ -655,6 +659,18 @@ class ModuleTranslator(astwalker.ASTWalker):
 		var = self._findSymbol(fromTree=variableName, type_=ESVariable)
 		var.llvmRef = self._createAllocaForVar(variableName.text, var.esType.toLLVMType())
 
+		if self._debugMode:
+			# first find reference to dbgSubProg / enclosing function ast node
+			dbgSubProg = None
+			for n in reversed(self._nodes):
+				if hasattr(n, 'dbgSubProg'):
+					dbgSubProg = n.dbgSubProg
+					break
+
+			assert(dbgSubProg and '_onDefVariable works only inside functions')
+
+			llvmdebug.addLocalVariableInfo(module=self._module, builder=self._currentBuilder, llvmRef=var.llvmRef, subprogram=dbgSubProg, name=variableName.text, lineNumber=variableName.line, varType='auto')
+
 
 	def _onDefGlobal(self, ast, variableName, typeName, expression):
 		var = self._findSymbol(fromTree=variableName, type_=ESVariable)
@@ -813,6 +829,18 @@ class ModuleTranslator(astwalker.ASTWalker):
 			# does not have an associated alloca, yet
 			# we MUST NOT pass a value to _createAllocaForVar! That value is not available in the entry BB!
 			var.llvmRef = self._createAllocaForVar(var.name, var.esType.toLLVMType())
+			if self._debugMode:
+				# first find reference to dbgSubProg / enclosing function ast node
+				dbgSubProg = None
+				for n in reversed(self._nodes):
+					if hasattr(n, 'dbgSubProg'):
+						dbgSubProg = n.dbgSubProg
+						break
+
+				assert(dbgSubProg and '_onDefVariable works only inside functions')
+
+				llvmdebug.addLocalVariableInfo(module=self._module, builder=self._currentBuilder, llvmRef=var.llvmRef, subprogram=dbgSubProg, name=var.name, lineNumber=0, varType='auto') # FIXME fix line number
+
 
 		self._currentBuilder.store(llvmValue, var.llvmRef)
 

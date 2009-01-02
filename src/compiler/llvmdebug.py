@@ -80,6 +80,30 @@ def _setupTypes():
 		_int32,
 		])
 
+	Types.globalVariable = Type.struct([
+		_int32,
+		_pEmptyStruct,
+		_pEmptyStruct,
+		_pint8,
+		_pint8,
+		_pint8,
+		_pEmptyStruct,
+		_int32,
+		_pEmptyStruct,
+		_int1,
+		_int1,
+		_pEmptyStruct,
+		])
+
+	Types.variable = Type.struct([
+		_int32,
+		_pEmptyStruct,
+		_pint8,
+		_pEmptyStruct,
+		_int32,
+		_pEmptyStruct,
+		])
+
 
 _setupTypes()
 
@@ -248,6 +272,42 @@ def addStopPoint(module, builder, lineNumber, columnNumber=0):
 	builder.call(stopPoint, [Constant.int(_int32, lineNumber),
 					Constant.int(_int32, columnNumber),
 					compileUnit])
+
+
+def addLocalVariableInfo(module, builder, llvmRef, subprogram, name, lineNumber, varType):
+	varTypes = {}
+	varTypes['auto'] = 256
+	varTypes['arg'] = 257
+	varTypes['ret'] = 258
+	varType = varTypes[varType]
+
+	# FIXME HACK: llvm-py does not yet provide an "bitcastinst"
+	import llvm._core
+	ptr = llvm._core.LLVMBuildBitCast(builder.ptr, llvmRef.ptr, _pEmptyStruct.ptr, '')
+	llvmRefPES = Value(ptr)
+
+
+	nameData = Constant.stringz(name)
+	name = _addGlobal(module, nameData.type, '__dbgstr', LINKAGE_INTERNAL, nameData)
+
+	compileUnit = module.get_global_variable_named('llvm.dbg.compile_unit')
+
+	gepIdx = [Constant.int(_int32, 0,), Constant.int(_int32, 0)]
+	init = Constant.struct([
+		Constant.int(_int32, varType + _dbgVersion),
+		subprogram.bitcast(_pEmptyStruct),
+		name.gep(gepIdx),
+		compileUnit.bitcast(_pEmptyStruct),
+		Constant.int(_int32, lineNumber),
+		Constant.null(_pEmptyStruct), # FIXME ref to type info
+		])
+	variable = _addGlobal(module, Types.variable, 'llvm.dbg.variable', LINKAGE_INTERNAL, init)
+
+
+	declareVar = module.get_function_named('llvm.dbg.declare')
+	builder.call(declareVar, [llvmRefPES, variable.bitcast(_pEmptyStruct)])
+
+
 
 
 
