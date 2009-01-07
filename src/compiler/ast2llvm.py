@@ -402,7 +402,8 @@ class ModuleTranslator(astwalker.ASTWalker):
 		errorString.initializer = errorStringConst
 		errorString.global_constant = True
 
-		idx = [Constant.int(Type.int(32), 0), Constant.int(Type.int(32), 0)]
+		word = self._findSymbol(name=u'word', type_=ESType).toLLVMType()
+		idx = [Constant.int(word, 0), Constant.int(word, 0)]
 		errorStringGEP = errorString.gep(idx)
 		puts = self._module.get_function_named('puts')
 		thenBuilder.call(puts, [errorStringGEP])
@@ -600,7 +601,8 @@ class ModuleTranslator(astwalker.ASTWalker):
 		string.global_constant = True
 		string.linkage = LINKAGE_INTERNAL
 
-		idx = [Constant.int(Type.int(32), 0), Constant.int(Type.int(32), 0)]
+		word = self._findSymbol(name=u'word', type_=ESType).toLLVMType()
+		idx = [Constant.int(word, 0), Constant.int(word, 0)]
 		ast.llvmValue = string.gep(idx)
 
 
@@ -1005,19 +1007,39 @@ class ModuleTranslator(astwalker.ASTWalker):
 		# so the optimizer will remove it
 		# for now stay stay with the inefficient code...
 
+		word = self._findSymbol(name=u'word', type_=ESType).toLLVMType()
+
 		esType = expression.esType
 		if esType.isPointer():
 			if indexExpression:
 				self._dispatch(indexExpression)
-				idx = [indexExpression.llvmValue]
+
+				if indexExpression.llvmValue.type != word:
+					llvmValue = indexExpression.llvmValue
+					llvmType = llvmValue.type
+
+					if llvmType.kind != TYPE_INTEGER:
+						self._raiseException(RecoverableCompileError, tree=indexExpression, inlineText='index type must be integer')
+
+					if llvmType.width == 32 and word.width == 64:
+						llvmValue = self._currentBuilder.sext(llvmValue, word)
+					elif llvmType.width == 64 and word.width == 32:
+						self._raise(RecoverableCompileError, tree=indexExpression, inlineText='the target architecture only supports 32 bit indices')
+					else:
+						assert(0 and 'FIXME or should this never happen --> dead code path?')
+				else:
+					llvmValue = indexExpression.llvmValue
+
+
+				idx = [llvmValue]
 			else:
-				idx = [Constant.int(Type.int(32), 0)]
+				idx = [Constant.int(word, 0)]
 
 			toDeref = expression.llvmValue
 		elif esType.isStruct():
 			if indexExpression.type == TreeType.NAME:
 				memberIdx = esType.getStructMemberIndexByName(indexExpression.text)
-				idx = [Constant.int(Type.int(32), 0), Constant.int(Type.int(32), memberIdx)]
+				idx = [Constant.int(word, 0), Constant.int(Type.int(32), memberIdx)]
 			else:
 				raise NotImplementedError('TODO')
 
