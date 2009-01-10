@@ -648,9 +648,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 		entryBB = llvmFunc.get_entry_basic_block()
 		entryBuilder = Builder.new(entryBB)
-		# workaround: llvm-py segfaults when we call position_at_beginning on an empty block
-		if entryBB.instructions:
-			entryBuilder.position_at_beginning(entryBB)
+		entryBuilder.position_at_beginning(entryBB)
 		ref = entryBuilder.alloca(llvmType, name)
 		entryBuilder.store(value, ref)
 
