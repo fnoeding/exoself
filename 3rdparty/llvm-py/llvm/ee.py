@@ -54,6 +54,42 @@ class TargetData(llvm.Ownable):
     def __str__(self):
         return _core.LLVMTargetDataAsString(self.ptr)
 
+    @property
+    def is_little_endian(self):
+        return _core.LLVMByteOrder(self.ptr) == 1
+
+    @property
+    def sizeof_pointer(self):
+        return _core.LLVMPointerSize(self.ptr)
+
+    @property
+    def int_pointer_type(self):
+        return core.IntegerType(_core.LLVMIntPtrType(self.ptr), core.TYPE_INTEGER)
+
+    def sizeof_type_in_bits(self, ty):
+        return _core.LLVMSizeOfTypeInBits(self.ptr, ty.ptr)
+
+    def store_sizeof_type(self, ty):
+        return _core.LLVMStoreSizeOfType(self.ptr, ty.ptr)
+
+    def abi_sizeof_type(self, ty):
+        return _core.LLVMABISizeOfType(self.ptr, ty.ptr)
+
+    def abi_alignmentof_type(self, ty):
+        return _core.LLVMABIAlignmentOfType(self.ptr, ty.ptr)
+
+    def callframe_alignmentof_type(self, ty):
+        return _core.LLVMCallFrameAlignmentOfType(self.ptr, ty.ptr)
+
+    def preferred_alignmentof_type(self, ty):
+        return _core.LLVMPreferredAlignmentOfType(self.ptr, ty.ptr)
+
+    def preferred_alignmentof_global(self, gv):
+        return _core.LLVMPreferredAlignmentOfGlobal(self.ptr, gv.ptr)
+
+    def offsetof_element_in_struct(self, ty, idx):
+        return _core.LLVMOffsetOfElement(self.ptr, ty.ptr, idx)
+
 
 #===----------------------------------------------------------------------===
 # Generic value
