@@ -11,6 +11,11 @@ def detect(conf):
 
 
 	conf.env['EXOSELF'] = os.path.join(conf.srcdir, 'compiler', 'exoself')
+	if '-g' in conf.env['EXOSELF_OPTIONS']:
+		conf.env['EXOSELF_DEBUG'] = '-g'
+		conf.env.append_unique('LLVM_LLC_OPTIONS', '-fast') # some trivial optimizations done by llc break the debug information
+	else:
+		conf.env['EXOSELF_DEBUG'] = ''
 
 
 	conf.env['LLVM_LINK'] = conf.find_program('llvm-link')
@@ -22,8 +27,8 @@ def detect(conf):
 
 esTask = Task.simple_task_type('exoself', '${EXOSELF} ${EXOSELF_OPTIONS} -c -o ${TGT} ${SRC}', color='BLUE')
 Task.simple_task_type('llvm-link', '${LLVM_LINK} -f -o ${TGT} ${SRC}')
-Task.simple_task_type('llvm-llc', '${LLVM_LLC} -f -o ${TGT} ${SRC}')
-Task.simple_task_type('llvm-native-compile', '${LLVM_NATIVE_C} -c -o ${TGT} ${SRC}')
+Task.simple_task_type('llvm-llc', '${LLVM_LLC} ${LLVM_LLC_OPTIONS} -f -o ${TGT} ${SRC}')
+Task.simple_task_type('llvm-native-compile', '${LLVM_NATIVE_C} ${EXOSELF_DEBUG} -c -o ${TGT} ${SRC}')
 
 
 
