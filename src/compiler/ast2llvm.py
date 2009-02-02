@@ -113,7 +113,10 @@ class ModuleTranslator(astwalker.ASTWalker):
 				BB = function.append_basic_block('bb')
 
 				b = Builder.new(entryBB)
+				if self._debugMode:
+					dbgSubProg = self._debugInfoBuilder.addFunctionInfoStart(module=self._module, builder=b, lineNumber=0, name='main', displayName='main')
 				b.branch(BB)
+
 
 				b = Builder.new(BB)
 				r = b.call(esMain.llvmRef, [])
@@ -125,6 +128,9 @@ class ModuleTranslator(astwalker.ASTWalker):
 					b.ret(r)
 				else:
 					b.ret(Constant.int(Type.int(32), 0))
+
+				if self._debugMode:
+					self._debugInfoBuilder.addFunctionInfoEnd(module=self._module, builder=b, subprogram=dbgSubProg)
 			else:
 				# TODO implement version with parameters
 				self._raiseException(RecoverableCompileError, postText=s)
@@ -162,25 +168,10 @@ class ModuleTranslator(astwalker.ASTWalker):
 		if not self._debugMode:
 			return
 
-		int1 = Type.int(1)
-		int32 = Type.int(32)
-		int64 = Type.int(64)
-		pEmptyStruct = Type.pointer(Type.struct([]))
-		pint8 = Type.pointer(Type.int(8))
-
-		self._dbgVersion = 6 << 16
-
-		# add declarations for debug intrinsics
-		self._dbgIntrinsics = llvmdebug.addIntrinsics(self._module)
-
-		# add debug types
-		llvmdebug.addTypes(self._module)
-
-		# per program data
-		llvmdebug.addGlobalInfo(self._module)
-
-		# per compile unit data
-		llvmdebug.addCompileUnitInfo(self._module, self._filename)
+		self._debugInfoBuilder = llvmdebug.DebugInfoBuilder()
+		self._debugInfoBuilder.setupModule(self._module, self._targetData)
+		self._debugInfoBuilder.addGlobalInfo(self._module)
+		self._debugInfoBuilder.addCompileUnitInfo(self._module, self._filename)
 
 
 	def _findCurrentFunction(self):
@@ -200,6 +191,12 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 		self._moduleCTors = ast.moduleCTors
 		self._moduleDTors = ast.moduleDTors
+
+		# setup target and data layout
+		self._targetData = TargetData.new('e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128')# FIXME; this is just the llvm-gcc default for x86_64-unknown-linux-gnu
+
+		self._module.data_layout = str(self._targetData) # FIXME
+		self._module.target = 'x86_64-unknown-linux-gnu' # FIXME
 
 		# setup debug Info
 		self._setupDebugInformation()
@@ -294,7 +291,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 		entryBB = llvmRef.append_basic_block('entry')
 		bEntry = Builder.new(entryBB)
 		if self._debugMode:
-			dbgSubProg = llvmdebug.addFunctionInfoStart(module=self._module, builder=bEntry, lineNumber=ast.line, name=esFunction.name, displayName=esFunction.name)
+			dbgSubProg = self._debugInfoBuilder.addFunctionInfoStart(module=self._module, builder=bEntry, lineNumber=ast.line, name=esFunction.name, displayName=esFunction.name)
 			ast.dbgSubProg = dbgSubProg
 
 
@@ -304,7 +301,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 			var.llvmRef = self._createAllocaForVar(x.text, var.toLLVMType(), llvmRef.args[i])
 
 			if self._debugMode:
-				llvmdebug.addLocalVariableInfo(module=self._module, builder=bEntry, llvmRef=var.llvmRef, subprogram=dbgSubProg, name=x.text, lineNumber=x.line, varType='arg')
+				self._debugInfoBuilder.addLocalVariableInfo(module=self._module, builder=bEntry, llvmRef=var.llvmRef, esType=var.esType, subprogram=dbgSubProg, name=x.text, lineNumber=x.line, varType='arg')
 
 		# branch from entry to real code block and dispatch function body
 		bb = llvmRef.append_basic_block('bb')
@@ -324,7 +321,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 				self._currentBuilder.ret(Constant.int(Type.int(32), -1)) # and return, otherwise func.verify will fail
 
 		if self._debugMode:
-			llvmdebug.addFunctionInfoEnd(module=self._module, builder=self._currentBuilder, subprogram=dbgSubProg)
+			self._debugInfoBuilder.addFunctionInfoEnd(module=self._module, builder=self._currentBuilder, subprogram=dbgSubProg)
 
 		llvmRef.verify()
 
@@ -333,7 +330,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 	def _onBlock(self, ast, blockContent):
 		for x in blockContent:
 			if self._debugMode:
-				llvmdebug.addStopPoint(self._module, self._currentBuilder, x.line, x.charPos)
+				self._debugInfoBuilder.addStopPoint(self._module, self._currentBuilder, x.line, x.charPos)
 			self._dispatch(x)
 
 
@@ -669,7 +666,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 			assert(dbgSubProg and '_onDefVariable works only inside functions')
 
-			llvmdebug.addLocalVariableInfo(module=self._module, builder=self._currentBuilder, llvmRef=var.llvmRef, subprogram=dbgSubProg, name=variableName.text, lineNumber=variableName.line, varType='auto')
+			self._debugInfoBuilder.addLocalVariableInfo(module=self._module, builder=self._currentBuilder, llvmRef=var.llvmRef, esType=var.esType, subprogram=dbgSubProg, name=variableName.text, lineNumber=variableName.line, varType='auto')
 
 
 	def _onDefGlobal(self, ast, variableName, typeName, expression):
@@ -839,7 +836,7 @@ class ModuleTranslator(astwalker.ASTWalker):
 
 				assert(dbgSubProg and '_onDefVariable works only inside functions')
 
-				llvmdebug.addLocalVariableInfo(module=self._module, builder=self._currentBuilder, llvmRef=var.llvmRef, subprogram=dbgSubProg, name=var.name, lineNumber=0, varType='auto') # FIXME fix line number
+				self._debugInfoBuilder.addLocalVariableInfo(module=self._module, builder=self._currentBuilder, llvmRef=var.llvmRef, esType=var.esType, subprogram=dbgSubProg, name=var.name, lineNumber=0, varType='auto') # FIXME fix line number
 
 
 		self._currentBuilder.store(llvmValue, var.llvmRef)

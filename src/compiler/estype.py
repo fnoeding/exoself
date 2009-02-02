@@ -298,6 +298,21 @@ class ESType(object):
 
 		return p.payload[0] == 'selfpointer'
 
+
+	def isVoid(self):
+		p = self
+		while p.payload[0] == 'typedef':
+			p = p.parents[0]
+
+		if p.payload[0] != 'elementary':
+			return False
+
+		if p.payload[1] != 'void':
+			return False
+
+		return True
+
+
 	def isBoolean(self):
 		p = self
 		while p.payload[0] == 'typedef':
